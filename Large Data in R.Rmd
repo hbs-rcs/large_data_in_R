@@ -1,6 +1,6 @@
 ---
-title: "Large Data in R: Or How I Learned to Stop Worrying and Allocate That Vector"
-author: "Ben Sabath\n"
+title: "Large Data in R: Tools and Techniques"
+authors: "Ben Sabath\nand\n Ista Zahn\n"
 output: github_document
 date: "Updated `r format(Sys.Date(), '%B %d, %Y')`"
 ---
@@ -11,10 +11,8 @@ date: "Updated `r format(Sys.Date(), '%B %d, %Y')`"
 
  - [Part 0: Environment Set Up](#part-0-environment-set-up)
  - [Part 1: What is Large Data?](#part-1-what-is-large-data)
- - [Part 2: How Does R Work With Memory?](#part-2-how-does-r-work-with-memory)
- - [Part 3: Thinking about Memory Challenges in R](#part-3-thinking-about-memory-challenges-in-r)
- - [Part 4: Working With Data that "Mostly Fits"](#part-4-working-with-data-that-mostly-fits)
- - [Part 5: Working With Data That "Doesn't Fit"](#part-5-working-with-data-that-doesnt-fit)
+ - [Part 2: Modern Storage Formats](#part-2-storage-formats-and-partitioning)
+ - [Part 3: Querying Partitioned Datasets](#part3-querying-partitioned-datasets)
  - [Additional Resources](#additional-resources)
 
 --------
@@ -135,7 +133,7 @@ One common type not seen here is the string. strings are arrays of characters st
  
  There are limits on this. A single CPU can only do one calculation at a time, so if we have a lot of calculations to do, things may take a while. Similarly, memory can only hold so much data, and if we go over that limit, we either get an error, or have to find some work around. Understanding this flow is key to analyzing how to find those workarounds, and what the limits on our workarounds are.
 
-## Part 2: How Does R Work With Memory?
+### 1.4 How Does R Work With Memory?
 
 Basically everything in this section is pulled from Chapters 2 and 3 of [Hadley Wickham's Advanced R](https://adv-r.hadley.nz/names-values.html). I can't recommend that enough as a resource to really understand what's going on in R under the covers.
 
@@ -147,7 +145,7 @@ We'll be using a mix of the `lobstr` package and R's built in functions to get a
 library(lobstr)
 ```
 
-### 2.1 R as a Language
+#### 1.4.1 R as a Language
 
 Why do people use R? There are a number of other statistical programming languages out there. But users choose R for a number of reasons. One of the biggest, R is free. R is a descendant/open source re-implementation of the S programming language developed originally at Bell Labs, and has been in development as a language since the mid 90s.
 
@@ -163,7 +161,7 @@ However, R is not without its problems. To quote from Advanced R:
 
 Many of these problems stem from most R development occurring in academic environments by students and researchers rather than in a more typical engineering environment. That said, there are always opportunities to improve R's code and to work around its challenges.
 
-### 2.2 Building Blocks of R, Lists and Vectors
+#### 1.4.2 Building Blocks of R, Lists and Vectors
 
 One of R's biggest strengths is its native support for vectorized operations. R's users take for granted how easy it is to work with long vectors of data in the language, and how easy it is to quickly write code that executes large numbers of mathematical operations.
 
@@ -202,7 +200,7 @@ ref(x)
 ```
 
 
-### 2.3 Variable Assignment and Copy behavior
+#### 1.4.3 Variable Assignment and Copy behavior
 
 Let's walk through what's happening in memory when we run something simple like
 
@@ -259,9 +257,9 @@ R's default copying behavior is described as "copy on modify". In theory, any ob
 
 We can't know everywhere our objects are referenced, and Many minus one is still many. Therefore, the only way to know for sure when something is copied is to use the "tracemem" function. It is also a long distance from identifying where duplication is happening to eliminating that duplication.
 
-## Part 3: Thinking about Memory Challenges in R
+### 1.5 Thinking about Memory Challenges in R
 
-### 3.1 Trade Offs When Working With Big Data
+### 1.5.1 Trade Offs When Working With Big Data
 
 If you're working with data large enough to hit the dreaded `cannot allocate vector` error when running your code, you've got a problem. When using your naive workflow, you're trying to fit too large an object through the limit of your system's memory.
 
@@ -282,7 +280,7 @@ Conversely, since all computing processes can be theoretically parallelized (alt
 
 The appropriate solution depends on the needs and constraints of the specific project. 
 
-### 3.2 Types of Memory Challenges
+#### 1.5.2 Types of Memory Challenges
 
 For the remainder of this workshop, we're going to cover two types of memory problems. The separation between these is fairly arbitrary, and in most cases you'll want to use techniques from both sets of approaches to resolve your big data problems. 
 
@@ -290,12 +288,12 @@ The two types are as follows:
 - Data that "mostly fits" in memory. This is data where you can read the entire object in to memory, and even run some basic calculations on the set. However complicated calculations or data cleaning operations lead to you running out of memory.
 - Data that doesn't fit in memory. This is data where you can't even load what you need in to memory
 
-## Part 4: Working With Data that "Mostly Fits"
+## Part 2: Modern Storage Formats and Partitioning
 
 
 When working with data that "mostly fits", our main goals our to reduce the memory impact of all the computational processes being done. There are a number of approaches to this, which include both explicit use of tools and techniques designed to reduce the memory impact of operations, and techniques for thinking about program flow to minimize what needs to be held in memory at any point in time.
 
-#### 4.1 In Place Changes
+### 2.1 In Place Changes
 
 As previously discussed, R has unpredictable behavior with regard to data duplication. If a vector has been referred to at least twice at any point in the code, any change to that vector will lead to duplication of the entire vector. When we're dealing with data approaching the size of memory, any duplication poses the risk of creating an error and halting our program.
 
@@ -303,7 +301,7 @@ Working with In Place changes is the best way to avoid this duplication. R List 
 
 It is worth mentioning that pandas data tables in python, the standard method for python data analysis have default support for in place operations. While R is the standard tool in many academic disciplines, Python is a strong alternative approach for many applications.
 
-### 4.2 Inplace Data Frame Manipulation with `data.table`
+### 2.2 Inplace Data Frame Manipulation with `data.table`
 
 One of the best tools out there for working with large data frames in R is the `data.table` package. It implements the `data.table` object, with many routines written and compiled in C++ and designed for parallel processing. It also supports in place mutation operations on data.frames, as well as having a nice syntax for data aggregation and data joining.
 
@@ -334,7 +332,7 @@ In place memory work also improves computational speed and efficiency. There are
 
 In general, R duplication is somewhat unpredictable, as it depends on the number of times an object has been referenced at any point during a session. `tracemem` is a necessity for identifying duplication events. However for complex calculations that can't be implemented using `data.table` or other packages specifically built for in place calculations, you may need to implement your algorithm using `rcpp` or with the R API in C.
 
-### 4.3 Avoid Keeping Uneeded Data in Memory
+### 2.3 Avoid Keeping Uneeded Data in Memory
 
 Frequently, data cleaning operations contain mutation, filtering, and aggregation steps. When there is no risk of filling memory, the order these steps are performed doesn't matter. However, when memory usage needs to be taken in to consideration, we no longer have the same flexibility in our approaches.
 
@@ -389,7 +387,7 @@ agg_data <- cut_set[, .(count = .N), by = c("state", "age_grp", "gender")]
 agg_data
 ```
 
-### 4.4 Manage Data Types
+### 2.4 Manage Data Types
 
 As previously mentioned, R vectors contain many atomic values, each of which is ultimately one of the base data types in R. These atomic data types have varying sizes. While the size of these atomic objects differs only on the level of bytes, when multiplied millions or billions of times, these small differences add up. 
 
@@ -426,13 +424,13 @@ object.size(int_str_vec)
 ```
 The reason for this difference is that in order to optimize memory usage, R sets up a "string pool". where it stores all unique strings. Vectors of strings are then just pointers to objects in that shared string pool. This is why the string representation of all numbers 1-1,000,000 is much larger than a vector of repeated long strings. This also reduces the need for contiguous memory when dealing with strings, as we only need contiguous memory for the pointers, and not for the strings themselves.
 
-### 4.5 Explicit Memory Management
+### 2.5 Explicit Memory Management
 
-#### 4.5.1 `rm()`
+#### 2.5.1 `rm()`
 
 A general principle of optimizing your code for memory is that you should only keep the things you need. If you created a large vector that you're now done with, you can remove the reference by using the `rm()` function. Note that this won't free the memory immediately, R will simply no longer be able to find the data in question. The memory will ultimately be freed when the garbage collector is run, which brings up the question of
 
-#### 4.5.2 `gc()`
+#### 2.5.2 `gc()`
 
 To quote from Hadley Wikham's advanced R:
 
@@ -448,7 +446,7 @@ Key take aways from this:
 - Garbage collection is a background process, called by R when more memory is needed.
 - Theoretically, you never need to call `gc()`. That said, sometimes calling `gc()` appears to make more memory available. It's possible that this reduces some memory sharding issues, but it could also just be the higher mysteries of R.
 
-## Part 5: Working With Data That "Doesn't Fit"
+## Part 3: Querying Partitioned Datasets
 
 The techniques we have covered so far can help minimize memory usage when we have a data set in memory, but what happens when the data we need to analyze is larger than the memory we have access to?
 
@@ -457,7 +455,7 @@ Lets return to the diagram of data flow:
 ![Data flow redux](images/Computer Data Flow.png)
 Looking at this, we see that memory is basically a holding space in between disk and the CPU. We use it because I/O operations are super slow (in computing terms), but there's nothing that says we need to hold our entire data set at memory at any particular point. If our data set doesn't fit in memory, we can find ways to calculate partial products from portions of the data set, and then combine these smaller results to get what we need.
 
-### 5.1 Partial Products
+### 3.1 Partial Products
 
 Imagine we have a very tiny computer, that can only hold 16 numbers at a time in memory. How could we calculate the average of a vector of ~1 million numbers?
 
@@ -501,7 +499,7 @@ cat(paste0("Built In Mean: ", mean(big_data), "\n"))
 If you try to run this on your own, you'll notice that this partial product is much slower than the default mean calculation. R's built in functions are highly optimized for vectorized data, and for loops in R are notoriously slow. However, if the source data was not a vector, but rather a file on disk, running something slowly is better than not being able to run it at all.
 
 
-### 5.2 Data Streaming - `chunked`
+### 3.2 Data Streaming - `chunked`
 
 Data streaming is a method of reading in parts of a file at a time. If we're faced with a large csv file, we can use the chunked package to stream it and perform `dplyr` like data operations on it. In this example we demonstrate how to join two csv files using a streaming technique.
 
@@ -537,13 +535,13 @@ write_chunkwise(out, "cache/df3.csv")
 This works. However, our ability to do some operations is limited. We can use streaming in conjunction with a temporary sqlite database. However debugging that can prove challenging. This method can also be quite slow, as processing text files is inefficient, not to mention the number of IO operations occurring.
 
 
-### 5.4 Data Sharding
+### 3.4 Data Sharding
 
 Streaming data is generally useful, however it presents a couple challenges. First, is the general speed. Second is that typically we're interested in only working with portions of our data at any point. If we're streaming csv files, we have to traverse the entire file to get what we want. 
 
 A better approach can involve splitting our data in to shards ahead of time (informed by our sense of how the data will be used), ideally in to a data format that will allow us to also read in only single columns at a time.
 
-#### 5.4.1 Basic Tabular Data: `.fst` files
+#### 3.4.1 Basic Tabular Data: `.fst` files
 
 Here use `ripgrep`, an optimized version of grep to quickly break up our files by year. Note that this method require being aware of patterns in the data and thinking through how to use those to shard the data.
 
@@ -587,7 +585,7 @@ files <- list.files("cache/df1_shards", pattern = ".fst", full.names = T)
 Here we see that after sharding, and using the .fst files ability to select columns, we were able to quickly just get the values we were interested in.
 
 
-#### 5.4.2 More Complex Data: HDF5 files
+#### 3.4.2 More Complex Data: HDF5 files
 
 FST files work well enough when we want to shard on a single variable. However managing data shared on multiple variables becomes challenging, given our reliance on creating useful a file naming system to manage the sharded data.
 
@@ -661,19 +659,19 @@ h5write(dict, h5_file, "docs")
 print(h5read(h5_file, "docs"))
 ```
 
-#### 5.4.3 Other Useful Tools
+#### 3.4.3 Other Useful Tools
 
  - Apache Spark/Parquet Datasets are another useful tool supporting data sharding. They use the file system, with directory names corresponding to values of variables, similar to how we used groups with hdf5 files above. More information can be found [here](https://cran.r-project.org/web/packages/arrow/vignettes/dataset.html).
  
  - [vroom](https://vroom.r-lib.org/articles/vroom.html#reading-compressed-files-1) is a package designed for super fast reading of tabular data files. It provides similar functionality to `readr` but with improved performance, and additional features (such as supporting column selection). It works by indexing your data rather than reading it in to memory all at once, and then just reading only what you use in to memory. This reduces the memory impact when you only need access to a partial file, but still threatens to cause memory issues if not used carefully.
 
-### 5.5 Other Approaches
+### 3.5 Other Approaches
 
 The approaches we've covered today work with minimal infrastructure, and can easily work on both personal computers and in cluster environments. There are other techniques out there, all of which merit their own workshops, we'll briefly touch on these just to give people a sense of what's out there.
 
 Keep in mind that with these solutions, there is typically an increase in initial development time and a decrease in portability. It's always important to keep in mind the needs of your application when planning your solutions.
 
-#### 5.5.1 Databases
+#### 3.5.1 Databases
 
 SQL based database systems are the classic solution for dealing with complex data that exceeds the size of memory. The DBMS handles calculations of partial products in memory as well as handling optimization of the query plan. However most database systems require dedicated servers and are often not the best fit for academic research projects.
 
@@ -681,13 +679,13 @@ That said, we can use systems like sqlite to create file based databases that ca
 
 Database development and optimization is its own field of engineering, with enough material and nuance to require multiple university courses.
 
-#### 5.5.2 MPI Interfaces on HPC
+#### 3.5.2 MPI Interfaces on HPC
 
 One of the simplest solutions to big data problems (when working on a cluster system, and/or computing cost isn't a major concern) is to acquire more memory. However, with most tools in HPC computing environments we are physically limited by the total amount of memory available on a single node. 
 
 [MPI](https://hpc-wiki.info/hpc/MPI) provides a way around this limit by providing a method for separate nodes to pass messages to each other and effectively serve as a shared memory system, with many child nodes being coordinated by a controlling parent node. Developing a program to work using MPI is a complex development process, although the [R MPI library](https://docs.rc.fas.harvard.edu/kb/r-mpi/) does exist to simplify integration between the base MPI library and R.
 
-#### 5.5.3 Spark
+#### 3.5.3 Spark
 
 [Apache Spark](https://spark.apache.org/) is a "a fast and general processing engine compatible with Hadoop data." Spark clusters can support working with data larger than memory (and can automatically handle memory overflows by putting data on disk as necessary). Spark can be set up locally on a personal computer, or run on a cluster system managed by Kubernetes.
 
