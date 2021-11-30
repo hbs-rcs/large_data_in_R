@@ -17,89 +17,35 @@ date: "Updated `r format(Sys.Date(), '%B %d, %Y')`"
 
 --------
 
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/mbsabath/large_data_in_R/HEAD?urlpath=rstudio)
-
-## Part 0: Environment Set Up
+## Environment Set Up
 
 **PLEASE DO THIS BEFORE THE WORKSHOP**
 
-There are multiple ways to set up your environment for this course. Our focus will be more on the 
-concepts underlying Large Data in R and how to work through problems, rather then executing specific
-blocks of code. 
+The examples and exercises require R and several R packages. If you do not yet have R installed you can do so following the instructions at https://cran.r-project.org/ . You may also wish to install Rstudio from https://www.rstudio.com/products/rstudio/download/#download
 
-The easiest way to follow along with your own R studio instance is to click on the binder tag at the top of the screen. It'll open up an Rstudio instance in your browser with everything we need aleady installed.
-
-However if you'd like to follow along on your own computer rather than in your browser, to help ensure that you have all packages you need installed, I've provided a `conda` environment in this repo for your use.
-
-Note: This course assumes that you are comfortable using the command line and are working on a Unix based system (MacOS or Linux). The assistance I'll be able to provide for attendees with windows computers will be limited.
-
-#### STEP 0 - Clone This Repo
-If you're reading this, you've found the git repository with materials for this course. The easiest way to download all of the materials and have them properly arranged is to clone this repo. To do this run the following command
+Once you have R installed you can proceed to install the required packages:
 
 ```
-git clone git@github.com:mbsabath/large_data_in_R
+install.packages(c("data.table", "fst", "tidyverse", "dbplyr", "duckdb", "arrow"))
 ```
 
-This will create a local copy of this repo on your computer. `cd` to that directory for the rest of this setup.
-
-#### STEP 1 - Install Conda
-
-If you're working on a computer that doesn't currently have conda installed, you can install miniconda [using this link](https://docs.conda.io/en/latest/miniconda.html). I recommend the Python 3.9 version.
- 
-#### STEP 2 - Create The Environment
-
-Included in the repo is the file `large_data_env.yml`. This file lists the packages needed for this course. Conda is great for environment management and environment sharing since it handles installing all of the dependencies needed, and can support set up on multiple operating systems. Creating conda environments for your projects is a separate subject, but is a great way to make your research projects easy for others to use and to support reproducibility. To install this environment run:
-```
-conda env create -f large_data_env.yml
-```
-You will be prompted to download and install a number of packages, please install things as prompted.
-
-If everything worked, you should see an environment named `large_data_in_R` listed when you run
-```
-conda env list
-```
-#### STEP 3 - Run R and Install One Additional Package
-
-To activate the environment, run the following command:
-```
-source activate large_data_in_R
-```
-
-If this is successful, your terminal prompt will change to look something like this:
-```
-(large_data_in_R) <username> large_data_in_R %
-```
-
-To run Rstudio using the environment, it's important to run it from the terminal. To start Rstudio from the terminal, enter 
-```
-rstudio
-```
-from the terminal where you've activated the environment. The rstudio window that opens will have all required packages already installed, with the exception of the `chunked` and `fst` packages, which have some challenges when installing through conda. To install those packages, please run:
-```{R, eval = F}
-install.packages("chunked")
-install.packages("fst")
-```
 Once those are is installed, your environment is good to go!
 
+## Nature and Scope of the Problem: What is Large Data?
 
-## Part 1: What Is Large Data?
+Most popular data analysis software is designed to operate on data stored in random access memory (aka just "memory" or "RAM"). This makes modifying and copying data very fast and convenient, until you start working with data that is too large for your computer's memory system. At that point you have two options: get a bigger computer or modify your workflow to process the data more carefully and efficiently. This workshop focuses on option two, using the `arrow` and `duckdb` packages in R to work with data without necessarily loading it all into memory at once.
 
-### 1.1: Defining Big Data
+A common definition of "big data" is "data that is too big to process using traditional software". We can use the term "large data" as a broader category of "data that is big enough that you have to pay attention to processing it efficiently".
 
-There is often discussion in data science circles about "what counts" as big data. For some, it's data that can't fit in memory, for others it's data so big, it can't fit on a single hard drive. It might be one single large file, or TBs upon TBs of small files. It might just be an excel file large enough that Excel complains when you use it.
+## Problem example
 
-![Qui Gon Jinn](images/Qui-Gon-Jinn_d89416e8.jpeg)
-*There's always bigger data - Qui Gon Jinn*
 
-For me, I find the most useful definition to be "Data that is big enough that you cannot use standard workflows". Any time data is big enough that you need to adjust your processes to account for that, you're entering the world of "Big Data".
 
-That said, for R users, and generally most academic users, the main big data issue is data that is too big to be easily worked with in memory. That is the problem this workshop will seek to address.
-
-### 1.2 What is Data?
+## What is Data?
 
 #### 1.2.1 Data on Disk
 
-When thinking about and working with data, it's important to understand the layers of abstraction present and how they interact with each other. Think of an html file. On disk, the file is just a structured section of bits. However, depending on how its encoded (either ASCII or UTF-8), we have instructions for how to interpret those bits as a text file. An html file in text format is more readable than the raw bits and can be edited by a knowledgeable web developer; however, it is not until the final layer of abstraction, when the information contained in the page is rendered by your browser that the information in the file can be easily interpreted.
+Think of a `.csv` file. On disk, the file is just a structured section of bits. However, depending on how its encoded (either ASCII or UTF-8), we have instructions for how to interpret those bits as a text file. A `.csv` file is more readable than the raw bits and can be edited using any text editor you wish. however, it is not until the final layer of abstraction, when the information contained in the page is rendered by your browser that the information in the file can be easily interpreted.
 
 ![Data Abstraction Layers](images/data_abstraction.png)
 *Examples of layers of abstraction in data*
@@ -133,133 +79,8 @@ One common type not seen here is the string. strings are arrays of characters st
  
  There are limits on this. A single CPU can only do one calculation at a time, so if we have a lot of calculations to do, things may take a while. Similarly, memory can only hold so much data, and if we go over that limit, we either get an error, or have to find some work around. Understanding this flow is key to analyzing how to find those workarounds, and what the limits on our workarounds are.
 
-### 1.4 How Does R Work With Memory?
-
-Basically everything in this section is pulled from Chapters 2 and 3 of [Hadley Wickham's Advanced R](https://adv-r.hadley.nz/names-values.html). I can't recommend that enough as a resource to really understand what's going on in R under the covers.
-
-Understanding what we cover in this section is extremely important to our thinking about how to resolve memory issues in R. If we don't understand how the language works, we'll find ourselves fumbling around in the dark looking for solutions. 
-
-We'll be using a mix of the `lobstr` package and R's built in functions to get at some of what's going on here.
-
-```{R}
-library(lobstr)
-```
-
-#### 1.4.1 R as a Language
-
-Why do people use R? There are a number of other statistical programming languages out there. But users choose R for a number of reasons. One of the biggest, R is free. R is a descendant/open source re-implementation of the S programming language developed originally at Bell Labs, and has been in development as a language since the mid 90s.
-
-The other big factor that leads to wide adoption of R as a language is its strong user and developer community. Numerous statistical techniques are available already implemented as R packages, and the R language has numerous feature that link to performant computer languages enabling optimization of the language.
-
-However, R is not without its problems. To quote from Advanced R:
-
->Much of the R code you’ll see in the wild is written in haste to solve a pressing problem. As a result, code is not very elegant, fast, or easy to understand. Most users do not revise their code to address these shortcomings.
->
->Compared to other programming languages, the R community is more focussed on results than processes. Knowledge of software engineering best practices is patchy. For example, not enough R programmers use source code control or automated testing.
->
-> R is not a particularly fast programming language, and poorly written R code can be terribly slow. R is also a profligate user of memory.
-
-Many of these problems stem from most R development occurring in academic environments by students and researchers rather than in a more typical engineering environment. That said, there are always opportunities to improve R's code and to work around its challenges.
-
-#### 1.4.2 Building Blocks of R, Lists and Vectors
-
-One of R's biggest strengths is its native support for vectorized operations. R's users take for granted how easy it is to work with long vectors of data in the language, and how easy it is to quickly write code that executes large numbers of mathematical operations.
-
-The vector is the key object of R. Almost everything in R is a vector. When we execute even simple code like this:
-```{R hello world}
-print("hello world")
-```
-The "[1]" next to our print statement tells us that we're outputting a vector of length 1.
-
-There are two key types of vectors in R, "atomic vectors" and lists. 
-
-![lists_vectors](images/vector_lists.png)
-
-Typically, when R users say "vector" they are referring to an atomic vector. 
-
-![atomic vector map](images/summary-tree-atomic.png)
-
-Atomic vectors consist of a single data type. Advanced R goes in to great detail on their characteristics, but for our purposes it's also important to mention that atomic vectors require a contiguous block of memory.
-
-We can see this when we use the `ref` function from the `lobstr` package on a long vector and only get a single memory address.
-```{R atomic address}
-x <- rnorm(1e6)
-ref(x)
-```
-In contrast to atomic vectors, lists can have objects of multiple data types, including other lists. This behavior enables lists to be used to store oddly shaped and highly dimensional data, but comes at a performance and overhead cost. Lists are able to do this by storing the memory address of the data in question rather than the data itself.
-
-
-![list](images/list.png)
-
-
-When we create a list and ask for its memory address we see not just the address of the list, but also the addresses of the objects contained in the list.
-
-```{R}
-x <- list(1,2,3)
-ref(x)
-```
-
-
-#### 1.4.3 Variable Assignment and Copy behavior
-
-Let's walk through what's happening in memory when we run something simple like
-
-```{R}
-x <- c(1,2,3,4,5,6,7,8,9,10)
-```
-First, the systen finds space in memory that can hold 10 integers next to each other. Then that space is filled with the values 1-10. Finally, the address of that space is returned to R and then associated  with the variable name x.
-
-In this section, we're going to use the `tracemem` function to track when x is copied. `tracemem` is a memory tracking function available in base R, although it needs to be enabled at compile time to be available for use as it can impact code performance. Most personal computers have tracemem enabled, as does the RCE cluster at Harvard. It is not enabled on the Cannon cluster.
-
-```{R}
-tracemem(x)
-```
-This returns the current memory address of x. Let's see what happens when we do something to change x.
-
-```{R}
-x[[2]] <- 5 
-ref(x)
-```
-So here we see some evidence of copying behavior. This is unexpected behavior, but likely results from the Rmarkdown environment. Try running this same code in your console to see if it repeats.
-
-So what do we think will happen when we run the following line? Do you think we'll see something copied here, or no?
-```{R, eval=F}
-y <- x
-```
-
-Now lets execute it here:
-```{R}
-y <- x
-```
-No output, let's run `ref` to see what's happening:
-```{R}
-ref(x)
-ref(y)
-```
-They have the same address. We can model things in memory like this:
-
-![two names](images/binding-f2.png)
-
-So what happens if we want to change `x` again? `x` and `y` are pointing to the same object, maybe running something like `x[4] <- 4`. In languages like Python, if we did that, it would change the 3rd object for both variables. But what does R do?
-
-```{R}
-x[4] <- 4
-```
-Here we see another copy event recorded (this one expected).
-```{R}
-ref(x)
-ref(y)
-```
-
-We see that `y` still points to the old location, but now `x` points to a new location.
-
-R's default copying behavior is described as "copy on modify". In theory, any object that is pointed to by at least two names will be copied when one of the variables is operated on in a way that can potentially change it. R tracks the number of times an object is referenced, but does so lazily. An object can be referenced 0 times, 1 time, or "Many" times. If an object is referenced "Many" times, the copy on modify behavior is triggered. This sounds predictable but, as we saw, is anything but.
-
-We can't know everywhere our objects are referenced, and Many minus one is still many. Therefore, the only way to know for sure when something is copied is to use the "tracemem" function. It is also a long distance from identifying where duplication is happening to eliminating that duplication.
 
 ### 1.5 Thinking about Memory Challenges in R
-
-### 1.5.1 Trade Offs When Working With Big Data
 
 If you're working with data large enough to hit the dreaded `cannot allocate vector` error when running your code, you've got a problem. When using your naive workflow, you're trying to fit too large an object through the limit of your system's memory.
 
@@ -276,17 +97,6 @@ When you hit a  memory bottleneck (assuming it's not caused by a simple to fix b
     
 A simple solution to a large data problem is just to throw more memory at it. Depending on the problem, how often something needs to be run, how long it's expected to take, etc, that's often a decent solution, and minimizes the development time needed. However, compute time could still be extended, and the resources required to run the program are quite expensive. For reference, a single node with 8 cores and 100GB of memory costs 300$/month on Amazon. If you need 400GB of memory (which some naive approaches using the CMS data I'm familiar with do), the cost for a single node goes up to 1200 per month. 
 
-Conversely, since all computing processes can be theoretically parallelized (although just because something is parallelized, it doesn't mean it will perform better), with enough development time, any algorithm could be made to run in a standard personal computer's memory. 
-
-The appropriate solution depends on the needs and constraints of the specific project. 
-
-#### 1.5.2 Types of Memory Challenges
-
-For the remainder of this workshop, we're going to cover two types of memory problems. The separation between these is fairly arbitrary, and in most cases you'll want to use techniques from both sets of approaches to resolve your big data problems. 
-
-The two types are as follows:
-- Data that "mostly fits" in memory. This is data where you can read the entire object in to memory, and even run some basic calculations on the set. However complicated calculations or data cleaning operations lead to you running out of memory.
-- Data that doesn't fit in memory. This is data where you can't even load what you need in to memory
 
 ## Part 2: Modern Storage Formats and Partitioning
 
