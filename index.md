@@ -328,35 +328,35 @@ is so much faster:
 
 ``` r
 ## standard R csv reader
-system.time(invisible(readr::read_csv(fhvhv_csv_files[[3]], show_col_types = FALSE)))
+system.time(invisible(readr::read_csv(fhvhv_csv_files[[1]], show_col_types = FALSE)))
 ```
 
     ##    user  system elapsed 
-    ##  32.429   1.653   7.989
+    ##  47.170   3.098  17.439
 
 ``` r
 ## fread from the data.table package
-system.time(invisible(data.table::fread(fhvhv_csv_files[[3]])))
+system.time(invisible(data.table::fread(fhvhv_csv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##   3.378   0.381   1.076
+    ##   4.910   0.578   2.856
 
 ``` r
 ## arrow package csv reader
-system.time(invisible(read_csv_arrow(fhvhv_csv_files[[3]])))
+system.time(invisible(read_csv_arrow(fhvhv_csv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##   4.757   1.465   2.155
+    ##  10.084   2.347   6.610
 
 ``` r
 ## arrow package parquet reader
-system.time(invisible(read_parquet(fhvhv_files[[3]])))
+system.time(invisible(read_parquet(fhvhv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##   1.438   0.817   0.624
+    ##   2.425   1.427   1.795
 
 ### Read just the data we need
 

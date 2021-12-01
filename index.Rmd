@@ -158,13 +158,13 @@ As expected, the binary parquet storage format is much more compact than the tex
 
 ```{r, message=FALSE}
 ## standard R csv reader
-system.time(invisible(readr::read_csv(fhvhv_csv_files[[3]], show_col_types = FALSE)))
+system.time(invisible(readr::read_csv(fhvhv_csv_files[[1]], show_col_types = FALSE)))
 ## fread from the data.table package
-system.time(invisible(data.table::fread(fhvhv_csv_files[[3]])))
+system.time(invisible(data.table::fread(fhvhv_csv_files[[1]])))
 ## arrow package csv reader
-system.time(invisible(read_csv_arrow(fhvhv_csv_files[[3]])))
+system.time(invisible(read_csv_arrow(fhvhv_csv_files[[1]])))
 ## arrow package parquet reader
-system.time(invisible(read_parquet(fhvhv_files[[3]])))
+system.time(invisible(read_parquet(fhvhv_files[[1]])))
 ```
 ### Read just the data we need
 
