@@ -42,7 +42,7 @@ In order to demonstrate large data problems and solutions I'm going to artificia
 First we can use the `arrow` package to get a list of "high volume for hire vehicle" ride data files
 from Amazon S3:
 
-```{r,results='hide'}
+```{r, results='hide', message=FALSE, warning=FALSE}
 library(tidyverse)
 library(arrow)
 ```
