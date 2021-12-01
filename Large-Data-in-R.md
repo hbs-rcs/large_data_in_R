@@ -8,6 +8,18 @@ Updated December 01, 2021
 -   [Problem example](#problem-example)
 -   [General strategies and
     principles](#general-strategies-and-principles)
+    -   [Use a fast binary data storage format that enables reading data
+        subsets](#use-a-fast-binary-data-storage-format-that-enables-reading-data-subsets)
+    -   [Partition (aka “shard”) the data on disk to facilitate chunked
+        access and
+        computation](#partition-aka-shard-the-data-on-disk-to-facilitate-chunked-access-and-computation)
+    -   [Only read in the data you
+        need](#only-read-in-the-data-you-need)
+    -   [Use streaming data tools and algorithms where
+        available](#use-streaming-data-tools-and-algorithms-where-available)
+    -   [Avoid unnecessarily storing or duplicating data in
+        memory](#avoid-unnecessarily-storing-or-duplicating-data-in-memory)
+    -   [Technique summary](#technique-summary)
 -   [Solution example](#solution-example)
 -   [Other Useful Tools](#other-useful-tools)
     -   [3.5 Other Approaches](#35-other-approaches)
@@ -173,6 +185,9 @@ a single node goes up to 1200 per month.
 Recall that **I want to know how many Uber rides were taken in New York
 City during 2020**. Part of the probelm with our first attempt is that
 CSV files do not make it easy to quickly read subsets or select columns.
+
+### Use a fast binary data storage format that enables reading data subsets
+
 CSVs, TSVs, and similar *delimited files* are all *text-based formats*
 that are typically used to store tabular data. Other more general
 text-based data storage formats are in wide use as well, including XML
@@ -188,52 +203,44 @@ and allow fast selective access to data subsets. These substantial
 advantages come at the cost of human readability; you cannot easily
 inspect the contents of binary data files directly. If you are concerned
 with reducing memory use or data processing time this is probably a
-trade-off you are happy to make. This brings us to strategy #1
+trade-off you are happy to make.
 
-**Use a fast binary data storage format that enables reading data
-subsets**
+The `parquet` binary storage format is among the best currently
+available. Support in R is provided by the `arrow` package. In a moment
+we’ll see how we can use the `arrow` package to dramatically reduce the
+time it takes to get data from disk to memory and back.
 
-There are several data storage formats that fit this description,
-including *parquet*, *fst*, *netcdf*, Stata *dta* files, and more.
-Choosing one usually comes down to how familiar and useful you find the
-tools that have been developed to work with your chosen data storage
-format.
+### Partition (aka “shard”) the data on disk to facilitate chunked access and computation
 
-![Data Abstraction Layers](images/data_abstraction.png) *Examples of
-layers of abstraction in data*
+Memory requirements can be reduced by partitioning the data and
+computation into chunks, running each one sequentially, and combining
+the results at the end. It is common practice to partition (aka “shard”)
+the data on disk storage to make this computational strategy more
+natural and efficient. For example, the taxi data is already partitioned
+the data by month, i.e., there is a separate data file for each
+year/month.
 
-The same process occurs with any data we want to analyze. Whatever its
-ultimate structure or purpose is, all data is blocks of bits, with
-abstraction layers that define how those bits should be interpreted.
+### Only read in the data you need
 
 If we think carefully about it we’ll see that our previous attempt to
 process the taxi data by reading in all the data at once was wasteful.
 Not all the rows are Uber rides, and the only column I really need is
-the one that tells me if the ride was an Uber or not. This brings us to
-strategy #2:
+the one that tells me if the ride was an Uber or not. I can perform the
+computation I need by only reading in that one column, and only the rows
+for which the `Hvfhs_license_num` column is equal to `HV0003` (Uber).
 
-**Only read in the data you need**
-
-Going a step further, memory requirements can be reduced even further by
-partitioning the data and computation into chunks, running each one
-sequentially, and combining the results at the end. It is common
-practice to partition (aka “shard”) the data on disk storage to make
-this computational strategy more natural and efficient. For example, the
-taxi data we looked at earlier partitioned the data by month, i.e.,
-there is a separate data file for each year/month. This is an example of
-technique #3
-
-**Partition (aka “shard”) the data on disk to facilitate chunked access
-and computation**
+### Use streaming data tools and algorithms where available
 
 Even when taking care to read into memory only the data we need, we may
 find that we still don’t have enough memory. In this case we may have to
 consider using a different tool and/or changing our algorithm to use
 *streaming* data, i.e., to compute the desired result without every
 having loaded all the data used in the calculation into memory at once.
-This is technique #4
+The `duckdb` R package will enable us to perform streaming SQL queries,
+enabling us to perform many summary statistics without ever manually
+reading data into memory at all.
 
-**Use streaming data tools and algorithms where available**
+### Avoid unnecessarily storing or duplicating data in memory
 
 It is also important to pay some attention to storing and processing
 data efficiently once we have it loaded in memory. R likes to make
@@ -243,15 +250,15 @@ remove or avoid storing intermediate results you don’t need and take
 care not to make copies of your data structures unless you have to. This
 is technique #5
 
-**Avoid unnecessarily storing or duplicating data in memory**
+### Technique summary
 
 We’ve accumulated quite a list of helpful techniques! To review:
 
 -   Use a fast binary data storage format that enables reading data
     subsets
--   Only read in the data you need
 -   Partition (aka “shard”) the data on disk to facilitate chunked
     access and computation
+-   Only read in the data you need
 -   Use streaming data tools and algorithms where available
 -   Avoid unnecessarily storing or duplicating data in memory
 
