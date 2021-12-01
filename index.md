@@ -21,6 +21,8 @@ Updated December 01, 2021
         memory](#avoid-unnecessarily-storing-or-duplicating-data-in-memory)
     -   [Technique summary](#technique-summary)
 -   [Solution example](#solution-example)
+    -   [Convert .csv to parquet](#convert-csv-to-parquet)
+    -   [Read just the data we need](#read-just-the-data-we-need)
 -   [Other Useful Tools](#other-useful-tools)
     -   [3.5 Other Approaches](#35-other-approaches)
     -   [Databases](#databases)
@@ -40,9 +42,19 @@ from <https://www.rstudio.com/products/rstudio/download/#download>
 Once you have R installed you can proceed to install the required
 packages:
 
-    install.packages(c("data.table", "fst", "tidyverse", "dbplyr", "duckdb", "arrow"))
+``` r
+install.packages(c("tidyverse", "duckdb", "arrow"))
+```
 
-Once those are is installed, your environment is good to go!
+Once those are is installed please take a moment to download the data
+used in the examples and exercises. You can do it from R if you wish:
+
+``` r
+if(!file.exists("original_csv.zip")) {
+  download.file("https://www.dropbox.com/s/vbodicsu591o7lf/original_csv.zip?dl=1", "original_csv.zip")
+  unzip("original_csv.zip")
+}
+```
 
 ## Nature and Scope of the Problem: What is Large Data?
 
@@ -79,70 +91,45 @@ we must either stay under that limit or buy more memory.
 Grounding our discussion in a concrete problem example will help make
 things clear. **I want to know how many Uber rides were taken in New
 York City during 2020**. The data is publicly available as documented at
-<https://registry.opendata.aws/nyc-tlc-trip-records-pds/> .
+<https://www1.nyc.gov/site/tlc/about/tlc-trip-record-data.page> and I
+have made a subset available on dropbox as described in the Setup
+section above for convenience. Documentation can be found at
+<https://www1.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_hvfhs.pdf>
 
 In order to demonstrate large data problems and solutions I’m going to
-artificially limit my system to 2Gb of memory. This will allow is to
+artificially limit my system to 8Gb of memory. This will allow is to
 quickly see what happens when we reach the memory limit, and to look at
 solutions to that problem without waiting for our program to read in
 hundreds of Gb of data. On Linux memory can be artificially limited
-using the `ulimit` command before staring R, e.g., `ulimit -Sv 2000000`.
+using the `ulimit` command before staring R, e.g., `ulimit -Sv 8000000`.
 
-First we can use the `arrow` package to get a list of “high volume for
-hire vehicle” ride data files from Amazon S3:
-
-``` r
-library(tidyverse)
-library(arrow)
-```
+Start by looking at the file names and sizes:
 
 ``` r
-bucket <- s3_bucket("nyc-tlc") ## connect to AWS S3 data bucket
-(fhvhv_files <- str_subset(bucket$ls("trip data/"), "fhvhv.*2020")) ## file name list
+fhvhv_csv_files <- list.files("original_csv", full.names = TRUE)
+data.frame(file = fhvhv_csv_files, size_Mb = file.size(fhvhv_csv_files) / 1024^2)
 ```
 
-    ##  [1] "trip data/fhvhv_tripdata_2020-01.csv"
-    ##  [2] "trip data/fhvhv_tripdata_2020-02.csv"
-    ##  [3] "trip data/fhvhv_tripdata_2020-03.csv"
-    ##  [4] "trip data/fhvhv_tripdata_2020-04.csv"
-    ##  [5] "trip data/fhvhv_tripdata_2020-05.csv"
-    ##  [6] "trip data/fhvhv_tripdata_2020-06.csv"
-    ##  [7] "trip data/fhvhv_tripdata_2020-07.csv"
-    ##  [8] "trip data/fhvhv_tripdata_2020-08.csv"
-    ##  [9] "trip data/fhvhv_tripdata_2020-09.csv"
-    ## [10] "trip data/fhvhv_tripdata_2020-10.csv"
-    ## [11] "trip data/fhvhv_tripdata_2020-11.csv"
-    ## [12] "trip data/fhvhv_tripdata_2020-12.csv"
+    ##                                       file   size_Mb
+    ## 1  original_csv/fhvhv_tripdata_2020-01.csv 1243.4975
+    ## 2  original_csv/fhvhv_tripdata_2020-02.csv 1313.2442
+    ## 3  original_csv/fhvhv_tripdata_2020-03.csv  808.5597
+    ## 4  original_csv/fhvhv_tripdata_2020-04.csv  259.5806
+    ## 5  original_csv/fhvhv_tripdata_2020-05.csv  366.5430
+    ## 6  original_csv/fhvhv_tripdata_2020-06.csv  454.5977
+    ## 7  original_csv/fhvhv_tripdata_2020-07.csv  599.2560
+    ## 8  original_csv/fhvhv_tripdata_2020-08.csv  667.6880
+    ## 9  original_csv/fhvhv_tripdata_2020-09.csv  728.5463
+    ## 10 original_csv/fhvhv_tripdata_2020-10.csv  798.4743
+    ## 11 original_csv/fhvhv_tripdata_2020-11.csv  698.0638
+    ## 12 original_csv/fhvhv_tripdata_2020-12.csv  700.6804
 
-Next we can use this list to get the size (in Mb) of each of these
-files:
-
-``` r
-for(file in bucket$GetFileInfo(fhvhv_files)) {
-  print(file$size/1024^2) ## file size in Mb
-}
-```
-
-    ## [1] 1243.497
-    ## [1] 1313.244
-    ## [1] 808.5597
-    ## [1] 259.5806
-    ## [1] 366.543
-    ## [1] 454.5977
-    ## [1] 599.256
-    ## [1] 667.688
-    ## [1] 728.5463
-    ## [1] 798.4743
-    ## [1] 698.0638
-    ## [1] 700.6804
-
-We can already guess based on these file sizes that with only 2 Gb of
+We can already guess based on these file sizes that with only 8 Gb of
 RAM available we’re going to have a problem.
 
 ``` r
-fhvhv_data <- map(fhvhv_files, ~ read_csv_arrow(bucket$path(.x))) %>%
-  bind_rows
-)
+library(arrow)
+fhvhv_data <- do.call(rbind, lapply(fhvhv_csv_files, read_csv_arrow))
 ```
 
     ## Error in eval(expr, envir, enclos): cannot allocate vector of size 7.6 Mb
@@ -247,8 +234,7 @@ data efficiently once we have it loaded in memory. R likes to make
 copies of the data, and while it does try to avoid unnecessary
 duplication this process can be unpredictable. At a minimum you can
 remove or avoid storing intermediate results you don’t need and take
-care not to make copies of your data structures unless you have to. This
-is technique #5
+care not to make copies of your data structures unless you have to.
 
 ### Technique summary
 
@@ -267,6 +253,114 @@ we ran up against before, and finally answer the question “**How many
 Uber rides were taken in New York City during 2020?**
 
 ## Solution example
+
+Now that we have some theoretical foundations to build on we can start
+putting these techniques into practice.
+
+### Convert .csv to parquet
+
+The first step is to take the slow and inefficient text-based data
+provided by the city of New York convert it to parquet using the `arrow`
+package. This is a one-time up-front cost that may be expensive in terms
+of time and/or computational resources. If you plan to work with the
+data a lot it will be well worth it because it allows subsequent reads
+to be fast and selective.
+
+``` r
+library(arrow)
+
+if(!dir.exists("converted_parquet")) dir.create("converted_parquet")
+
+outnames <- paste0("converted_parquet/", sub(".csv", ".parquet", basename(fhvhv_csv_files)))
+for (i in 1:length(fhvhv_csv_files)) {
+  if(!file.exists(outnames[i])) {
+    gc()
+    write_parquet(read_csv_arrow(file, as_data_frame=FALSE), outnames[i])
+  }
+}
+```
+
+Note that this conversion is relatively easy even with our artificially
+limited memory because the upstream data provider are already using one
+of our strategies, i.e., they partitioned the data by year/month. This
+allows us to convert each file one at a time, without ever needing to
+read in all the data at once.
+
+We can look at the converted files and compare the storage requirements
+to the original CSV data.
+
+``` r
+fhvhv_files <- list.files("converted_parquet", full.names = TRUE)
+data.frame(csv_file = basename(fhvhv_csv_files), parquet_file = basename(fhvhv_files), 
+           csv_size_Mb = file.size(fhvhv_csv_files) / 1024^2, parquet_size_Mb = file.size(fhvhv_files) / 1024^2)
+```
+
+    ##                      csv_file                   parquet_file csv_size_Mb
+    ## 1  fhvhv_tripdata_2020-01.csv fhvhv_tripdata_2020-01.parquet   1243.4975
+    ## 2  fhvhv_tripdata_2020-02.csv fhvhv_tripdata_2020-02.parquet   1313.2442
+    ## 3  fhvhv_tripdata_2020-03.csv fhvhv_tripdata_2020-03.parquet    808.5597
+    ## 4  fhvhv_tripdata_2020-04.csv fhvhv_tripdata_2020-04.parquet    259.5806
+    ## 5  fhvhv_tripdata_2020-05.csv fhvhv_tripdata_2020-05.parquet    366.5430
+    ## 6  fhvhv_tripdata_2020-06.csv fhvhv_tripdata_2020-06.parquet    454.5977
+    ## 7  fhvhv_tripdata_2020-07.csv fhvhv_tripdata_2020-07.parquet    599.2560
+    ## 8  fhvhv_tripdata_2020-08.csv fhvhv_tripdata_2020-08.parquet    667.6880
+    ## 9  fhvhv_tripdata_2020-09.csv fhvhv_tripdata_2020-09.parquet    728.5463
+    ## 10 fhvhv_tripdata_2020-10.csv fhvhv_tripdata_2020-10.parquet    798.4743
+    ## 11 fhvhv_tripdata_2020-11.csv fhvhv_tripdata_2020-11.parquet    698.0638
+    ## 12 fhvhv_tripdata_2020-12.csv fhvhv_tripdata_2020-12.parquet    700.6804
+    ##    parquet_size_Mb
+    ## 1        221.37902
+    ## 2        232.82627
+    ## 3        143.00006
+    ## 4         48.04683
+    ## 5         66.89160
+    ## 6         82.20870
+    ## 7        107.53598
+    ## 8        119.42568
+    ## 9        130.06381
+    ## 10       142.01453
+    ## 11       124.23919
+    ## 12       125.16402
+
+As expected, the binary parquet storage format is much more compact than
+the text-based CSV format. This is one reason that reading parquet data
+is so much faster:
+
+``` r
+## standard R csv reader
+system.time(invisible(readr::read_csv(fhvhv_csv_files[[3]], show_col_types = FALSE)))
+```
+
+    ##    user  system elapsed 
+    ##  32.429   1.653   7.989
+
+``` r
+## fread from the data.table package
+system.time(invisible(data.table::fread(fhvhv_csv_files[[3]])))
+```
+
+    ##    user  system elapsed 
+    ##   3.378   0.381   1.076
+
+``` r
+## arrow package csv reader
+system.time(invisible(read_csv_arrow(fhvhv_csv_files[[3]])))
+```
+
+    ##    user  system elapsed 
+    ##   4.757   1.465   2.155
+
+``` r
+## arrow package parquet reader
+system.time(invisible(read_parquet(fhvhv_files[[3]])))
+```
+
+    ##    user  system elapsed 
+    ##   1.438   0.817   0.624
+
+### Read just the data we need
+
+Now that we have the data in
 
 ## Other Useful Tools
 
