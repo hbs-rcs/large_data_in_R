@@ -54,6 +54,8 @@ if(!file.exists("original_csv.zip")) {
 }
 ```
 
+<!-- #region tags=[] -->
+
 Documentation for these data can be found at
 <https://www1.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_hvfhs.pdf>
 
@@ -79,13 +81,14 @@ format. We read it in to memory, do some stuff to it on the CPU, store
 the results of that stuff back in memory, then write those results back
 to disk so they can be available for the future, as depicted below.
 
-![Flow of Data in A Program](images/Computer%20Data%20Flow.png) The
-reason most data analysis software is designed to process data this way
-is because “doing some stuff” is much much faster in RAM than it is if
-you have to read values from disk every time you need them. The downside
-is that RAM is much more expensive than disk storage, and typically
+![Flow of Data in A Program](images/ComputerDataFlow.png) The reason
+most data analysis software is designed to process data this way is
+because “doing some stuff” is much much faster in RAM than it is if you
+have to read values from disk every time you need them. The downside is
+that RAM is much more expensive than disk storage, and typically
 available in smaller quantities. Memory can only hold so much data and
 we must either stay under that limit or buy more memory.
+<!-- #endregion -->
 
 ## Problem example
 
@@ -145,8 +148,8 @@ If you’re working with data large enough to hit the dreaded
 problem. When using your naive workflow, you’re trying to fit too large
 an object through the limit of your system’s memory.
 
-![The Evergiven (please put her back)](images/big%20boat.jpg) *An
-example of a large object causing a bottleneck*
+![The Evergiven](images/bigboat.png) *An example of a large object
+causing a bottleneck*
 
 When you hit a memory bottleneck (assuming it’s not caused by a simple
 to fix bug in your code), there is no magic quick solution to getting
@@ -360,7 +363,7 @@ system.time(invisible(readr::read_csv(fhvhv_csv_files[[1]], show_col_types = FAL
 ```
 
     ##    user  system elapsed 
-    ##  82.658   6.166  31.517
+    ##  56.336   2.729  20.744
 
 ``` r
 ## arrow package parquet reader
@@ -368,7 +371,7 @@ system.time(invisible(read_parquet(fhvhv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##   5.075   1.746  17.179
+    ##   3.590   1.220   8.027
 
 ### Read and count Lyft records with arrow
 
