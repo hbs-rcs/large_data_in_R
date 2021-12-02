@@ -22,7 +22,10 @@ Updated December 01, 2021
     -   [Technique summary](#technique-summary)
 -   [Solution example](#solution-example)
     -   [Convert .csv to parquet](#convert-csv-to-parquet)
-    -   [Read just the data we need](#read-just-the-data-we-need)
+    -   [Read just the Uber records and count
+        them](#read-just-the-uber-records-and-count-them)
+    -   [Use the duckdb package for streaming
+        aggregation](#use-the-duckdb-package-for-streaming-aggregation)
 -   [Other Useful Tools](#other-useful-tools)
     -   [3.5 Other Approaches](#35-other-approaches)
     -   [Databases](#databases)
@@ -269,45 +272,61 @@ to be fast and selective.
 ``` r
 library(arrow)
 
-if(!dir.exists("converted_parquet")) dir.create("converted_parquet")
-
-outnames <- paste0("converted_parquet/", sub(".csv", ".parquet", basename(fhvhv_csv_files)))
-for (i in 1:length(fhvhv_csv_files)) {
-  if(!file.exists(outnames[i])) {
+## This is the most complicated section of code in this workshop.
+## If your eyes start to glaze over, stick with it! It's not as complicated
+## as it might look, and things get better from here.
+if(!dir.exists("converted_parquet")) {
+  ## create vector of output file names
+  outnames <- paste("converted_parquet", 
+                    "2020", 
+                    sprintf("%02d", 1:12), 
+                    "fhvhv_tripdata.parquet", 
+                    sep = "/")
+  ## convert csv to parquet
+  for (i in 1:length(fhvhv_csv_files)) {
+    dir.create(dirname(outnames[i]),recursive = TRUE, showWarnings = FALSE)
+    write_parquet(read_csv_arrow(fhvhv_csv_files[i], as_data_frame=FALSE), 
+                  outnames[i])
     gc()
-    write_parquet(read_csv_arrow(file, as_data_frame=FALSE), outnames[i])
   }
 }
 ```
 
-Note that this conversion is relatively easy even with our artificially
-limited memory because the upstream data provider are already using one
-of our strategies, i.e., they partitioned the data by year/month. This
-allows us to convert each file one at a time, without ever needing to
-read in all the data at once.
+This conversion is relatively easy (even with our artificially limited
+memory) because the upstream data provider are already using one of our
+strategies, i.e., they partitioned the data by year/month. This allows
+us to convert each file one at a time, without ever needing to read in
+all the data at once.
+
+We also took some care to partition the data into `year/month`
+sub-directories. This is important because arrow treats data stored in
+this way as a unified data set even though it is partioned into multiple
+files.
 
 We can look at the converted files and compare the storage requirements
 to the original CSV data.
 
 ``` r
-fhvhv_files <- list.files("converted_parquet", full.names = TRUE)
-data.frame(csv_file = basename(fhvhv_csv_files), parquet_file = basename(fhvhv_files), 
-           csv_size_Mb = file.size(fhvhv_csv_files) / 1024^2, parquet_size_Mb = file.size(fhvhv_files) / 1024^2)
+fhvhv_files <- list.files("converted_parquet", full.names = TRUE, recursive = TRUE)
+data.frame(csv_file = basename(fhvhv_csv_files), 
+           parquet_file = basename(fhvhv_files), 
+           csv_size_Mb = file.size(fhvhv_csv_files) / 1024^2, 
+           parquet_size_Mb = file.size(fhvhv_files) / 1024^2)
 ```
 
-    ##                      csv_file                   parquet_file csv_size_Mb
-    ## 1  fhvhv_tripdata_2020-01.csv fhvhv_tripdata_2020-01.parquet   1243.4975
-    ## 2  fhvhv_tripdata_2020-02.csv fhvhv_tripdata_2020-02.parquet   1313.2442
-    ## 3  fhvhv_tripdata_2020-03.csv fhvhv_tripdata_2020-03.parquet    808.5597
-    ## 4  fhvhv_tripdata_2020-04.csv fhvhv_tripdata_2020-04.parquet    259.5806
-    ## 5  fhvhv_tripdata_2020-05.csv fhvhv_tripdata_2020-05.parquet    366.5430
-    ## 6  fhvhv_tripdata_2020-06.csv fhvhv_tripdata_2020-06.parquet    454.5977
-    ## 7  fhvhv_tripdata_2020-07.csv fhvhv_tripdata_2020-07.parquet    599.2560
-    ## 8  fhvhv_tripdata_2020-08.csv fhvhv_tripdata_2020-08.parquet    667.6880
-    ## 9  fhvhv_tripdata_2020-09.csv fhvhv_tripdata_2020-09.parquet    728.5463
-    ## 10 fhvhv_tripdata_2020-10.csv fhvhv_tripdata_2020-10.parquet    798.4743
-    ## 11 fhvhv_tripdata_2020-11.csv fhvhv_tripdata_2020-11.parquet    698.0638
-    ## 12 fhvhv_tripdata_2020-12.csv fhvhv_tripdata_2020-12.parquet    700.6804
+    ##                      csv_file           parquet_file csv_size_Mb
+    ## 1  fhvhv_tripdata_2020-01.csv fhvhv_tripdata.parquet   1243.4975
+    ## 2  fhvhv_tripdata_2020-02.csv fhvhv_tripdata.parquet   1313.2442
+    ## 3  fhvhv_tripdata_2020-03.csv fhvhv_tripdata.parquet    808.5597
+    ## 4  fhvhv_tripdata_2020-04.csv fhvhv_tripdata.parquet    259.5806
+    ## 5  fhvhv_tripdata_2020-05.csv fhvhv_tripdata.parquet    366.5430
+    ## 6  fhvhv_tripdata_2020-06.csv fhvhv_tripdata.parquet    454.5977
+    ## 7  fhvhv_tripdata_2020-07.csv fhvhv_tripdata.parquet    599.2560
+    ## 8  fhvhv_tripdata_2020-08.csv fhvhv_tripdata.parquet    667.6880
+    ## 9  fhvhv_tripdata_2020-09.csv fhvhv_tripdata.parquet    728.5463
+    ## 10 fhvhv_tripdata_2020-10.csv fhvhv_tripdata.parquet    798.4743
+    ## 11 fhvhv_tripdata_2020-11.csv fhvhv_tripdata.parquet    698.0638
+    ## 12 fhvhv_tripdata_2020-12.csv fhvhv_tripdata.parquet    700.6804
     ##    parquet_size_Mb
     ## 1        221.37902
     ## 2        232.82627
@@ -332,7 +351,7 @@ system.time(invisible(readr::read_csv(fhvhv_csv_files[[1]], show_col_types = FAL
 ```
 
     ##    user  system elapsed 
-    ##  47.170   3.098  17.439
+    ##  46.971   3.090  17.389
 
 ``` r
 ## fread from the data.table package
@@ -340,7 +359,7 @@ system.time(invisible(data.table::fread(fhvhv_csv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##   4.910   0.578   2.856
+    ##   4.945   0.615   3.013
 
 ``` r
 ## arrow package csv reader
@@ -348,7 +367,7 @@ system.time(invisible(read_csv_arrow(fhvhv_csv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##  10.084   2.347   6.610
+    ##   6.448   2.414   4.840
 
 ``` r
 ## arrow package parquet reader
@@ -356,11 +375,66 @@ system.time(invisible(read_parquet(fhvhv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##   2.425   1.427   1.795
+    ##   2.335   1.369   2.097
 
-### Read just the data we need
+### Read just the Uber records and count them
 
-Now that we have the data in
+The `arrow` package makes it easy to read and process only the data we
+need for a particular calculation. It allows us to use the partitioned
+data directories we created earlier as a single dataset and to query it
+using the `dplyr` verbs many R users are already familiar with.
+
+Start by creating a dataset representation from the partitioned data
+directory:
+
+``` r
+fhvhv_ds <- open_dataset("converted_parquet", partitioning = c("year", "month"))
+```
+
+the `year` and `month` partitioning argument corresponds to the two
+levels of the directory structure we created earlier.
+
+Importantly, `open_dataset` doesn’t actually read the data into memory.
+It just opens a connection to the dataset and makes it easy for us to
+query it. Finally we can compute the number of NYC Uber trips in 2020,
+even on a machine with limited memory:
+
+``` r
+library(dplyr, warn.conflicts = FALSE)
+
+fhvhv_ds %>%
+  filter(hvfhs_license_num == "HV0003") %>%
+  select(hvfhs_license_num) %>%
+  collect() %>%
+  summarize(total_uber_trips = n())
+```
+
+    ## # A tibble: 1 × 1
+    ##   total_uber_trips
+    ##              <int>
+    ## 1        103112054
+
+Note that `arrow` datasets do not support `summarize` natively, that is
+why we call `collect` first to actually read in the data.
+
+### Use the duckdb package for streaming aggregation
+
+The `arrow` package makes it fast and easy to query on-disk data and
+read in only the fields and records needed for a particular computation.
+This is a tremendous improvement over the typical R workflow, and may
+well be all you need to start using your large datasets more quickly and
+conveniently, even on modest hardware. If you need even more speed and
+convienence you can try the `duckdb` package. It allows you to query the
+same parquet datasets partitioned on disk as we did above. In many cases
+it even allows you to aggregate your data in a streaming fashion,
+meaning that you never have to load substantial data into memory at all.
+Let’s see how it works.
+
+``` r
+library(duckdb)
+```
+
+    ## Loading required package: DBI
 
 ## Other Useful Tools
 
