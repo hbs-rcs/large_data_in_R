@@ -10,13 +10,10 @@ Updated December 01, 2021
     principles](#general-strategies-and-principles)
     -   [Use a fast binary data storage format that enables reading data
         subsets](#use-a-fast-binary-data-storage-format-that-enables-reading-data-subsets)
-    -   [Partition (aka “shard”) the data on disk to facilitate chunked
-        access and
-        computation](#partition-aka-shard-the-data-on-disk-to-facilitate-chunked-access-and-computation)
+    -   [Partition the data on disk to facilitate chunked access and
+        computation](#partition-the-data-on-disk-to-facilitate-chunked-access-and-computation)
     -   [Only read in the data you
         need](#only-read-in-the-data-you-need)
-    -   [Use streaming data tools and algorithms where
-        available](#use-streaming-data-tools-and-algorithms-where-available)
     -   [Avoid unnecessarily storing or duplicating data in
         memory](#avoid-unnecessarily-storing-or-duplicating-data-in-memory)
     -   [Technique summary](#technique-summary)
@@ -24,14 +21,7 @@ Updated December 01, 2021
     -   [Convert .csv to parquet](#convert-csv-to-parquet)
     -   [Read just the Uber records and count
         them](#read-just-the-uber-records-and-count-them)
-    -   [Use the duckdb package for streaming
-        aggregation](#use-the-duckdb-package-for-streaming-aggregation)
--   [Other Useful Tools](#other-useful-tools)
-    -   [3.5 Other Approaches](#35-other-approaches)
-    -   [Databases](#databases)
-    -   [MPI Interfaces on HPC](#mpi-interfaces-on-hpc)
-    -   [Spark](#spark)
--   [Additional Resources](#additional-resources)
+-   [Your turn!](#your-turn)
 
 ## Environment Set Up
 
@@ -46,7 +36,7 @@ Once you have R installed you can proceed to install the required
 packages:
 
 ``` r
-install.packages(c("tidyverse", "duckdb", "arrow"))
+install.packages(c("tidyverse", "arrow"))
 ```
 
 Once those are is installed please take a moment to download the data
@@ -67,9 +57,8 @@ modifying and copying data very fast and convenient, until you start
 working with data that is too large for your computer’s memory system.
 At that point you have two options: get a bigger computer or modify your
 workflow to process the data more carefully and efficiently. This
-workshop focuses on option two, using the `arrow` and `duckdb` packages
-in R to work with data without necessarily loading it all into memory at
-once.
+workshop focuses on option two, using the `arrow` package in R to work
+with data without necessarily loading it all into memory at once.
 
 A common definition of “big data” is “data that is too big to process
 using traditional software”. We can use the term “large data” as a
@@ -201,7 +190,7 @@ available. Support in R is provided by the `arrow` package. In a moment
 we’ll see how we can use the `arrow` package to dramatically reduce the
 time it takes to get data from disk to memory and back.
 
-### Partition (aka “shard”) the data on disk to facilitate chunked access and computation
+### Partition the data on disk to facilitate chunked access and computation
 
 Memory requirements can be reduced by partitioning the data and
 computation into chunks, running each one sequentially, and combining
@@ -220,17 +209,6 @@ the one that tells me if the ride was an Uber or not. I can perform the
 computation I need by only reading in that one column, and only the rows
 for which the `Hvfhs_license_num` column is equal to `HV0003` (Uber).
 
-### Use streaming data tools and algorithms where available
-
-Even when taking care to read into memory only the data we need, we may
-find that we still don’t have enough memory. In this case we may have to
-consider using a different tool and/or changing our algorithm to use
-*streaming* data, i.e., to compute the desired result without every
-having loaded all the data used in the calculation into memory at once.
-The `duckdb` R package will enable us to perform streaming SQL queries,
-enabling us to perform many summary statistics without ever manually
-reading data into memory at all.
-
 ### Avoid unnecessarily storing or duplicating data in memory
 
 It is also important to pay some attention to storing and processing
@@ -242,14 +220,13 @@ care not to make copies of your data structures unless you have to.
 
 ### Technique summary
 
-We’ve accumulated quite a list of helpful techniques! To review:
+We’ve accumulated a list of helpful techniques! To review:
 
 -   Use a fast binary data storage format that enables reading data
     subsets
--   Partition (aka “shard”) the data on disk to facilitate chunked
-    access and computation
+-   Partition the data on disk to facilitate chunked access and
+    computation
 -   Only read in the data you need
--   Use streaming data tools and algorithms where available
 -   Avoid unnecessarily storing or duplicating data in memory
 
 Using these techniques will allow us to overcome the memory limitation
@@ -286,7 +263,8 @@ if(!dir.exists("converted_parquet")) {
   ## convert csv to parquet
   for (i in 1:length(fhvhv_csv_files)) {
     dir.create(dirname(outnames[i]),recursive = TRUE, showWarnings = FALSE)
-    write_parquet(read_csv_arrow(fhvhv_csv_files[i], as_data_frame=FALSE), 
+    write_parquet(read_csv_arrow(fhvhv_csv_files[i],
+                                 as_data_frame=FALSE), 
                   outnames[i])
     gc()
   }
@@ -352,7 +330,7 @@ system.time(invisible(readr::read_csv(fhvhv_csv_files[[1]], show_col_types = FAL
 ```
 
     ##    user  system elapsed 
-    ##  47.005   2.398  17.081
+    ##  75.765   3.516  28.132
 
 ``` r
 ## fread from the data.table package
@@ -360,7 +338,7 @@ system.time(invisible(data.table::fread(fhvhv_csv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##   4.990   0.578   2.891
+    ##   9.621   1.000   5.490
 
 ``` r
 ## arrow package csv reader
@@ -368,7 +346,7 @@ system.time(invisible(read_csv_arrow(fhvhv_csv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##   6.462   2.303   4.771
+    ##  11.580   4.353   8.863
 
 ``` r
 ## arrow package parquet reader
@@ -376,7 +354,7 @@ system.time(invisible(read_parquet(fhvhv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##   2.411   1.311   1.798
+    ##   4.295   1.850   2.901
 
 ### Read just the Uber records and count them
 
@@ -389,7 +367,9 @@ Start by creating a dataset representation from the partitioned data
 directory:
 
 ``` r
-fhvhv_ds <- open_dataset("converted_parquet", partitioning = c("year", "month"))
+fhvhv_ds <- open_dataset(
+  "converted_parquet", 
+  partitioning = c("year", "month"))
 ```
 
 the `year` and `month` partitioning argument corresponds to the two
@@ -397,7 +377,7 @@ levels of the directory structure we created earlier.
 
 Importantly, `open_dataset` doesn’t actually read the data into memory.
 It just opens a connection to the dataset and makes it easy for us to
-query it. Finally we can compute the number of NYC Uber trips in 2020,
+query it. Finally, we can compute the number of NYC Uber trips in 2020,
 even on a machine with limited memory:
 
 ``` r
@@ -418,114 +398,18 @@ fhvhv_ds %>%
 Note that `arrow` datasets do not support `summarize` natively, that is
 why we call `collect` first to actually read in the data.
 
-### Use the duckdb package for streaming aggregation
-
 The `arrow` package makes it fast and easy to query on-disk data and
 read in only the fields and records needed for a particular computation.
 This is a tremendous improvement over the typical R workflow, and may
 well be all you need to start using your large datasets more quickly and
-conveniently, even on modest hardware. If you need even more speed and
-convienence you can try the `duckdb` package. It allows you to query the
-same parquet datasets partitioned on disk as we did above. In many cases
-it even allows you to aggregate your data in a streaming fashion,
-meaning that you never have to load substantial data into memory at all.
-Let’s see how it works.
+conveniently, even on modest hardware.
 
-``` r
-library(duckdb)
-```
+## Your turn!
 
-    ## Loading required package: DBI
+Now that you understand some of the basic techniques for working with
+large data and have seen an example, you can start to apply what you’ve
+learned. Using the same taxi data, try answering the following
+questions:
 
-## Other Useful Tools
-
--   Apache Spark/Parquet Datasets are another useful tool supporting
-    data sharding. They use the file system, with directory names
-    corresponding to values of variables, similar to how we used groups
-    with hdf5 files above. More information can be found
-    [here](https://cran.r-project.org/web/packages/arrow/vignettes/dataset.html).
-
--   [vroom](https://vroom.r-lib.org/articles/vroom.html#reading-compressed-files-1)
-    is a package designed for super fast reading of tabular data files.
-    It provides similar functionality to `readr` but with improved
-    performance, and additional features (such as supporting column
-    selection). It works by indexing your data rather than reading it in
-    to memory all at once, and then just reading only what you use in to
-    memory. This reduces the memory impact when you only need access to
-    a partial file, but still threatens to cause memory issues if not
-    used carefully.
-
-### 3.5 Other Approaches
-
-The approaches we’ve covered today work with minimal infrastructure, and
-can easily work on both personal computers and in cluster environments.
-There are other techniques out there, all of which merit their own
-workshops, we’ll briefly touch on these just to give people a sense of
-what’s out there.
-
-Keep in mind that with these solutions, there is typically an increase
-in initial development time and a decrease in portability. It’s always
-important to keep in mind the needs of your application when planning
-your solutions.
-
-### Databases
-
-SQL based database systems are the classic solution for dealing with
-complex data that exceeds the size of memory. The DBMS handles
-calculations of partial products in memory as well as handling
-optimization of the query plan. However most database systems require
-dedicated servers and are often not the best fit for academic research
-projects.
-
-That said, we can use systems like sqlite to create file based databases
-that can support data operations without the use of significant memory.
-Databases, whether sqlite or a more powerful implementation have the
-advantage of basically all using a form of SQL as their main language.
-SQL is defined by an international standard, and basically all computer
-languages and systems have pre-built tools for interacting with SQL
-databases.
-
-Database development and optimization is its own field of engineering,
-with enough material and nuance to require multiple university courses.
-
-### MPI Interfaces on HPC
-
-One of the simplest solutions to big data problems (when working on a
-cluster system, and/or computing cost isn’t a major concern) is to
-acquire more memory. However, with most tools in HPC computing
-environments we are physically limited by the total amount of memory
-available on a single node.
-
-[MPI](https://hpc-wiki.info/hpc/MPI) provides a way around this limit by
-providing a method for separate nodes to pass messages to each other and
-effectively serve as a shared memory system, with many child nodes being
-coordinated by a controlling parent node. Developing a program to work
-using MPI is a complex development process, although the [R MPI
-library](https://docs.rc.fas.harvard.edu/kb/r-mpi/) does exist to
-simplify integration between the base MPI library and R.
-
-### Spark
-
-[Apache Spark](https://spark.apache.org/) is a “a fast and general
-processing engine compatible with Hadoop data.” Spark clusters can
-support working with data larger than memory (and can automatically
-handle memory overflows by putting data on disk as necessary). Spark can
-be set up locally on a personal computer, or run on a cluster system
-managed by Kubernetes.
-
-[Sparklyr](https://spark.rstudio.com/) is a R library that provides an
-interface for Spark and allows for `dplyr` like syntax to be used with
-Spark objects and provides a wrapper around Spark’s built in Machine
-learning libraries.
-
-For more information on working with Spark in R, please see the free
-book [Mastering Spark in R](https://therinspark.com/).
-
-## Additional Resources
-
--   [Hadley Wickham’s Advanced R](https://adv-r.hadley.nz/index.html)
--   [Data.Table Syntax Cheat
-    Sheet](https://www.datacamp.com/community/tutorials/data-table-cheat-sheet)
--   [Mastering Spark in R](https://therinspark.com/)
--   [R HDF5
-    Vignette](https://bioconductor.org/packages/release/bioc/vignettes/rhdf5/inst/doc/rhdf5.html)
+-   What percentage of trips are made by Lyft?
+-   What percentage of trips start between 10:00PM and Midnight?
