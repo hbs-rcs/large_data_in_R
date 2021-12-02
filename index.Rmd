@@ -45,7 +45,7 @@ The reason most data analysis software is designed to process data this way is b
 
 Grounding our discussion in a concrete problem example will help make things clear. **I want to know how many Uber rides were taken in New York City during 2020**. The data is publicly available as documented at https://www1.nyc.gov/site/tlc/about/tlc-trip-record-data.page and I have made a subset available on dropbox as described in the Setup section above for convenience. Documentation can be found at https://www1.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_hvfhs.pdf
 
-In order to demonstrate large data problems and solutions I'm going to artificially limit my system to 8Gb of memory. This will allow is to quickly see what happens when we reach the memory limit, and to look at solutions to that problem without waiting for our program to read in hundreds of Gb of data. On Linux memory can be artificially limited using the `ulimit` command before staring R, e.g., `ulimit -Sv 8000000`.
+In order to demonstrate large data problems and solutions I'm going to artificially limit my system to 8Gb of memory. This will allow is to quickly see what happens when we reach the memory limit, and to look at solutions to that problem without waiting for our program to read in hundreds of Gb of data. On Linux memory can be artificially limited using the `ulimit` command before starting R, e.g., `ulimit -Sv 8000000`.
 
 Start by looking at the file names and sizes:
 ```{r}
@@ -162,8 +162,8 @@ We can look at the converted files and compare the storage requirements to the o
 
 ```{r}
 fhvhv_files <- list.files("converted_parquet", full.names = TRUE, recursive = TRUE)
-data.frame(csv_file = basename(fhvhv_csv_files), 
-           parquet_file = basename(fhvhv_files), 
+data.frame(csv_file = fhvhv_csv_files, 
+           parquet_file = fhvhv_files, 
            csv_size_Mb = file.size(fhvhv_csv_files) / 1024^2, 
            parquet_size_Mb = file.size(fhvhv_files) / 1024^2)
 ```

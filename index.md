@@ -104,7 +104,8 @@ artificially limit my system to 8Gb of memory. This will allow is to
 quickly see what happens when we reach the memory limit, and to look at
 solutions to that problem without waiting for our program to read in
 hundreds of Gb of data. On Linux memory can be artificially limited
-using the `ulimit` command before staring R, e.g., `ulimit -Sv 8000000`.
+using the `ulimit` command before starting R, e.g.,
+`ulimit -Sv 8000000`.
 
 Start by looking at the file names and sizes:
 
@@ -308,38 +309,38 @@ to the original CSV data.
 
 ``` r
 fhvhv_files <- list.files("converted_parquet", full.names = TRUE, recursive = TRUE)
-data.frame(csv_file = basename(fhvhv_csv_files), 
-           parquet_file = basename(fhvhv_files), 
+data.frame(csv_file = fhvhv_csv_files, 
+           parquet_file = fhvhv_files, 
            csv_size_Mb = file.size(fhvhv_csv_files) / 1024^2, 
            parquet_size_Mb = file.size(fhvhv_files) / 1024^2)
 ```
 
-    ##                      csv_file           parquet_file csv_size_Mb
-    ## 1  fhvhv_tripdata_2020-01.csv fhvhv_tripdata.parquet   1243.4975
-    ## 2  fhvhv_tripdata_2020-02.csv fhvhv_tripdata.parquet   1313.2442
-    ## 3  fhvhv_tripdata_2020-03.csv fhvhv_tripdata.parquet    808.5597
-    ## 4  fhvhv_tripdata_2020-04.csv fhvhv_tripdata.parquet    259.5806
-    ## 5  fhvhv_tripdata_2020-05.csv fhvhv_tripdata.parquet    366.5430
-    ## 6  fhvhv_tripdata_2020-06.csv fhvhv_tripdata.parquet    454.5977
-    ## 7  fhvhv_tripdata_2020-07.csv fhvhv_tripdata.parquet    599.2560
-    ## 8  fhvhv_tripdata_2020-08.csv fhvhv_tripdata.parquet    667.6880
-    ## 9  fhvhv_tripdata_2020-09.csv fhvhv_tripdata.parquet    728.5463
-    ## 10 fhvhv_tripdata_2020-10.csv fhvhv_tripdata.parquet    798.4743
-    ## 11 fhvhv_tripdata_2020-11.csv fhvhv_tripdata.parquet    698.0638
-    ## 12 fhvhv_tripdata_2020-12.csv fhvhv_tripdata.parquet    700.6804
-    ##    parquet_size_Mb
-    ## 1        221.37902
-    ## 2        232.82627
-    ## 3        143.00006
-    ## 4         48.04683
-    ## 5         66.89160
-    ## 6         82.20870
-    ## 7        107.53598
-    ## 8        119.42568
-    ## 9        130.06381
-    ## 10       142.01453
-    ## 11       124.23919
-    ## 12       125.16402
+    ##                                   csv_file
+    ## 1  original_csv/fhvhv_tripdata_2020-01.csv
+    ## 2  original_csv/fhvhv_tripdata_2020-02.csv
+    ## 3  original_csv/fhvhv_tripdata_2020-03.csv
+    ## 4  original_csv/fhvhv_tripdata_2020-04.csv
+    ## 5  original_csv/fhvhv_tripdata_2020-05.csv
+    ## 6  original_csv/fhvhv_tripdata_2020-06.csv
+    ## 7  original_csv/fhvhv_tripdata_2020-07.csv
+    ## 8  original_csv/fhvhv_tripdata_2020-08.csv
+    ## 9  original_csv/fhvhv_tripdata_2020-09.csv
+    ## 10 original_csv/fhvhv_tripdata_2020-10.csv
+    ## 11 original_csv/fhvhv_tripdata_2020-11.csv
+    ## 12 original_csv/fhvhv_tripdata_2020-12.csv
+    ##                                        parquet_file csv_size_Mb parquet_size_Mb
+    ## 1  converted_parquet/2020/01/fhvhv_tripdata.parquet   1243.4975       221.37902
+    ## 2  converted_parquet/2020/02/fhvhv_tripdata.parquet   1313.2442       232.82627
+    ## 3  converted_parquet/2020/03/fhvhv_tripdata.parquet    808.5597       143.00006
+    ## 4  converted_parquet/2020/04/fhvhv_tripdata.parquet    259.5806        48.04683
+    ## 5  converted_parquet/2020/05/fhvhv_tripdata.parquet    366.5430        66.89160
+    ## 6  converted_parquet/2020/06/fhvhv_tripdata.parquet    454.5977        82.20870
+    ## 7  converted_parquet/2020/07/fhvhv_tripdata.parquet    599.2560       107.53598
+    ## 8  converted_parquet/2020/08/fhvhv_tripdata.parquet    667.6880       119.42568
+    ## 9  converted_parquet/2020/09/fhvhv_tripdata.parquet    728.5463       130.06381
+    ## 10 converted_parquet/2020/10/fhvhv_tripdata.parquet    798.4743       142.01453
+    ## 11 converted_parquet/2020/11/fhvhv_tripdata.parquet    698.0638       124.23919
+    ## 12 converted_parquet/2020/12/fhvhv_tripdata.parquet    700.6804       125.16402
 
 As expected, the binary parquet storage format is much more compact than
 the text-based CSV format. This is one reason that reading parquet data
@@ -351,7 +352,7 @@ system.time(invisible(readr::read_csv(fhvhv_csv_files[[1]], show_col_types = FAL
 ```
 
     ##    user  system elapsed 
-    ##  46.971   3.090  17.389
+    ##  47.005   2.398  17.081
 
 ``` r
 ## fread from the data.table package
@@ -359,7 +360,7 @@ system.time(invisible(data.table::fread(fhvhv_csv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##   4.945   0.615   3.013
+    ##   4.990   0.578   2.891
 
 ``` r
 ## arrow package csv reader
@@ -367,7 +368,7 @@ system.time(invisible(read_csv_arrow(fhvhv_csv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##   6.448   2.414   4.840
+    ##   6.462   2.303   4.771
 
 ``` r
 ## arrow package parquet reader
@@ -375,7 +376,7 @@ system.time(invisible(read_parquet(fhvhv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##   2.335   1.369   2.097
+    ##   2.411   1.311   1.798
 
 ### Read just the Uber records and count them
 
