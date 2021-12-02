@@ -16,7 +16,7 @@ The examples and exercises require R and several R packages. If you do not yet h
 Once you have R installed you can proceed to install the required packages:
 
 ```{r, eval=FALSE}
-install.packages(c("tidyverse", "arrow"))
+install.packages(c("tidyverse", "data.table", "arrow", "duckdb"))
 ```
 
 Once those are is installed please take a moment to download the data used in the examples and exercises. You can do it from R if you wish:
@@ -28,10 +28,11 @@ if(!file.exists("original_csv.zip")) {
 }
 ```
 
+Documentation for these data can be found at https://www1.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_hvfhs.pdf
 
 ## Nature and Scope of the Problem: What is Large Data?
 
-Most popular data analysis software is designed to operate on data stored in random access memory (aka just "memory" or "RAM"). This makes modifying and copying data very fast and convenient, until you start working with data that is too large for your computer's memory system. At that point you have two options: get a bigger computer or modify your workflow to process the data more carefully and efficiently. This workshop focuses on option two, using the `arrow` package in R to work with data without necessarily loading it all into memory at once.
+Most popular data analysis software is designed to operate on data stored in random access memory (aka just "memory" or "RAM"). This makes modifying and copying data very fast and convenient, until you start working with data that is too large for your computer's memory system. At that point you have two options: get a bigger computer or modify your workflow to process the data more carefully and efficiently. This workshop focuses on option two, using the `arrow` and `duckdb` packages in R to work with data without necessarily loading it all into memory at once.
 
 A common definition of "big data" is "data that is too big to process using traditional software". We can use the term "large data" as a broader category of "data that is big enough that you have to pay attention to processing it efficiently". 
 
@@ -49,7 +50,7 @@ In order to demonstrate large data problems and solutions I'm going to artificia
 
 Start by looking at the file names and sizes:
 ```{r}
-fhvhv_csv_files <- list.files("original_csv", full.names = TRUE)
+fhvhv_csv_files <- list.files("original_csv", recursive=TRUE, full.names = TRUE)
 data.frame(file = fhvhv_csv_files, size_Mb = file.size(fhvhv_csv_files) / 1024^2)
 ```
 
@@ -124,37 +125,29 @@ Now that we have some theoretical foundations to build on we can start putting t
 
 ### Convert .csv to parquet
 
-The first step is to take the slow and inefficient text-based data provided by the city of New York convert it to parquet using the `arrow` package. This is a one-time up-front cost that may be expensive in terms of time and/or computational resources. If you plan to work with the data a lot it will be well worth it because it allows subsequent reads to be fast and selective.
+The first step is to take the slow and inefficient text-based data provided by the city of New York convert it to parquet using the `arrow` package. This is a one-time up-front cost that may be expensive in terms of time and/or computational resources. If you plan to work with the data a lot it will be well worth it because it allows subsequent reads to be faster and more memory efficent.
 
 ```{r, message=FALSE}
 library(arrow)
 
-## This is the most complicated section of code in this workshop.
-## If your eyes start to glaze over, stick with it! It's not as complicated
-## as it might look, and things get better from here.
 if(!dir.exists("converted_parquet")) {
-  ## create vector of output file names
-  outnames <- paste("converted_parquet", 
-                    "2020", 
-                    sprintf("%02d", 1:12), 
-                    "fhvhv_tripdata.parquet", 
-                    sep = "/")
-  ## convert csv to parquet
-  for (i in 1:length(fhvhv_csv_files)) {
-    dir.create(dirname(outnames[i]),recursive = TRUE, showWarnings = FALSE)
-    write_parquet(read_csv_arrow(fhvhv_csv_files[i],
-                                 as_data_frame=FALSE), 
-                  outnames[i])
-    gc()
-  }
+  dir.create("converted_parquet")
+  ## this doesn't yet read the data in, it only creates a connection
+  csv_ds <- open_dataset("original_csv", 
+                         format = "csv",
+                         partitioning = c("year", "month"))
+  write_dataset(csv_ds, 
+                "converted_parquet", 
+                format = "parquet",
+                partitioning = c("year", "month"))
 }
 ```
 
-This conversion is relatively easy (even with our artificially limited memory) because the upstream data provider are already using one of our strategies, i.e., they partitioned the data by year/month. This allows us to convert each file one at a time, without ever needing to read in all the data at once.
+This conversion is relatively easy (even with limited memory) because the data provider is already using one of our strategies, i.e., they partitioned the data by year/month. This allows us to convert each file one at a time, without ever needing to read in all the data at once.
 
-We also took some care to partition the data into `year/month` sub-directories. This is important because arrow treats data stored in this way as a unified data set even though it is partioned into multiple files.
+We also took some care to partition the data into `year/month` sub-directories using what is known as "hive-style" partitioning. This is important because it makes it easy for `arrow` to automatically recognize the partitions.
 
-We can look at the converted files and compare the storage requirements to the original CSV data.
+We can look at the converted files and compare the nameing scheme and storage requirements to the original CSV data.
 
 ```{r}
 fhvhv_files <- list.files("converted_parquet", full.names = TRUE, recursive = TRUE)
@@ -167,28 +160,32 @@ data.frame(csv_file = fhvhv_csv_files,
 As expected, the binary parquet storage format is much more compact than the text-based CSV format. This is one reason that reading parquet data is so much faster:
 
 ```{r, message=FALSE}
-## standard R csv reader
+## tidyverse csv reader
 system.time(invisible(readr::read_csv(fhvhv_csv_files[[1]], show_col_types = FALSE)))
-## fread from the data.table package
-system.time(invisible(data.table::fread(fhvhv_csv_files[[1]])))
-## arrow package csv reader
-system.time(invisible(read_csv_arrow(fhvhv_csv_files[[1]])))
 ## arrow package parquet reader
 system.time(invisible(read_parquet(fhvhv_files[[1]])))
 ```
-### Read just the Uber records and count them
+
+### Read and count Uber records with arrow
 
 The `arrow` package makes it easy to read and process only the data we need for a particular calculation. It allows us to use the partitioned data directories we created earlier as a single dataset and to query it using the `dplyr` verbs many R users are already familiar with.
 
 Start by creating a dataset representation from the partitioned data directory:
 
 ```{r}
-fhvhv_ds <- open_dataset(
-  "converted_parquet", 
-  partitioning = c("year", "month"))
+fhvhv_ds <- open_dataset("converted_parquet",
+                         schema = schema(hvfhs_license_num=string(),
+                                         dispatching_base_num=string(),
+                                         pickup_datetime=string(),
+                                         dropoff_datetime=string(),
+                                         PULocationID=int64(),
+                                         DOLocationID=int64(),
+                                         SR_Flag=int64(),
+                                         year=int32(),
+                                         month=int32()))
 ```
 
-the `year` and `month` partitioning argument corresponds to the two levels of the directory structure we created earlier.
+Because we have hive-style directory names `open_dataset` automatically recognizes the partitions. Note that usually we do not need to manually specify the `schema`, we do so here to work around an issue with `duckdb` support.
 
 Importantly, `open_dataset` doesn't actually read the data into memory. It just opens a connection to the dataset and makes it easy for us to query it. Finally, we can compute the number of NYC Uber trips in 2020, even on a machine with limited memory:
 
@@ -203,12 +200,50 @@ fhvhv_ds %>%
 ```
 Note that `arrow` datasets do not support `summarize` natively, that is why we call `collect` first to actually read in the data.
 
-The `arrow` package makes it fast and easy to query on-disk data and read in only the fields and records needed for a particular computation. This is a tremendous improvement over the typical R workflow, and may well be all you need to start using your large datasets more quickly and conveniently, even on modest hardware. 
+The `arrow` package makes it fast and easy to query on-disk data and read in only the fields and records needed for a particular computation. This is a tremendous improvement over the typical R workflow, and may well be all you need to start using your large datasets more quickly and conveniently, even on modest hardware.
+
+### Efficiently query taxi data with duckdb
+
+If you need even more speed and convenience you can try the `duckdb` package. It allows you to query the same parquet datasets partitioned on disk as we did above. You can use either SQL statements via the `DBI` package or tidyverse style verbs using `dbplyr`. Let's see how it works.
+
+First we create a `duckdb` table from our `arrow` dataset.
+```{r, message=FALSE}
+library(duckdb)
+library(DBI)
+library(dplyr)
+
+con <- DBI::dbConnect(duckdb::duckdb())
+to_duckdb(fhvhv_ds, con, "fhvhv")
+```
+
+The `duckdb` table can be queried using tidyverse style verbs or SQL.
+```{r}
+## number of Uber trips, tidyverse style
+tbl(con,"fhvhv") %>%
+  filter(hvfhs_license_num == "HV0003") %>%
+  select(hvfhs_license_num) %>%
+  count()
+
+## number of Uber trips, SQL style
+y <- dbSendQuery(con, "SELECT COUNT(*) FROM fhvhv WHERE hvfhs_license_num=='HV0003';")
+dbFetch(y)
+```
+The main advantages of `duckdb` are that it has full SQL support and is optimized for speed.
 
 ## Your turn!
 
 Now that you understand some of the basic techniques for working with large data and have seen an example, you can start to apply what you've learned. Using the same taxi data, try answering the following questions:
 
 - What percentage of trips are made by Lyft?
-- What percentage of trips start between 10:00PM and Midnight?
+- In which month did Uber log the most trips?
+
+Documentation for these data can be found at https://www1.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_hvfhs.pdf
+
+
+## Additional resources
+
+- [Arrow R package documentation](https://arrow.apache.org/docs/r/)
+- [Arrow Python package documentation](https://arrow.apache.org/docs/python/)
+- [DuckDB documentation](https://duckdb.org/docs/)
+- 
 

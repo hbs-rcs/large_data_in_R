@@ -1,6 +1,6 @@
 Large Data in R: Tools and Techniques
 ================
-Updated December 01, 2021
+Updated December 02, 2021
 
 -   [Environment Set Up](#environment-set-up)
 -   [Nature and Scope of the Problem: What is Large
@@ -19,9 +19,12 @@ Updated December 01, 2021
     -   [Technique summary](#technique-summary)
 -   [Solution example](#solution-example)
     -   [Convert .csv to parquet](#convert-csv-to-parquet)
-    -   [Read just the Uber records and count
-        them](#read-just-the-uber-records-and-count-them)
+    -   [Read and count Uber records with
+        arrow](#read-and-count-uber-records-with-arrow)
+    -   [Efficiently query taxi data with
+        duckdb](#efficiently-query-taxi-data-with-duckdb)
 -   [Your turn!](#your-turn)
+-   [Additional resources](#additional-resources)
 
 ## Environment Set Up
 
@@ -36,7 +39,7 @@ Once you have R installed you can proceed to install the required
 packages:
 
 ``` r
-install.packages(c("tidyverse", "arrow"))
+install.packages(c("tidyverse", "data.table", "arrow", "duckdb"))
 ```
 
 Once those are is installed please take a moment to download the data
@@ -49,6 +52,9 @@ if(!file.exists("original_csv.zip")) {
 }
 ```
 
+Documentation for these data can be found at
+<https://www1.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_hvfhs.pdf>
+
 ## Nature and Scope of the Problem: What is Large Data?
 
 Most popular data analysis software is designed to operate on data
@@ -57,8 +63,9 @@ modifying and copying data very fast and convenient, until you start
 working with data that is too large for your computer’s memory system.
 At that point you have two options: get a bigger computer or modify your
 workflow to process the data more carefully and efficiently. This
-workshop focuses on option two, using the `arrow` package in R to work
-with data without necessarily loading it all into memory at once.
+workshop focuses on option two, using the `arrow` and `duckdb` packages
+in R to work with data without necessarily loading it all into memory at
+once.
 
 A common definition of “big data” is “data that is too big to process
 using traditional software”. We can use the term “large data” as a
@@ -99,23 +106,23 @@ using the `ulimit` command before starting R, e.g.,
 Start by looking at the file names and sizes:
 
 ``` r
-fhvhv_csv_files <- list.files("original_csv", full.names = TRUE)
+fhvhv_csv_files <- list.files("original_csv", recursive=TRUE, full.names = TRUE)
 data.frame(file = fhvhv_csv_files, size_Mb = file.size(fhvhv_csv_files) / 1024^2)
 ```
 
-    ##                                       file   size_Mb
-    ## 1  original_csv/fhvhv_tripdata_2020-01.csv 1243.4975
-    ## 2  original_csv/fhvhv_tripdata_2020-02.csv 1313.2442
-    ## 3  original_csv/fhvhv_tripdata_2020-03.csv  808.5597
-    ## 4  original_csv/fhvhv_tripdata_2020-04.csv  259.5806
-    ## 5  original_csv/fhvhv_tripdata_2020-05.csv  366.5430
-    ## 6  original_csv/fhvhv_tripdata_2020-06.csv  454.5977
-    ## 7  original_csv/fhvhv_tripdata_2020-07.csv  599.2560
-    ## 8  original_csv/fhvhv_tripdata_2020-08.csv  667.6880
-    ## 9  original_csv/fhvhv_tripdata_2020-09.csv  728.5463
-    ## 10 original_csv/fhvhv_tripdata_2020-10.csv  798.4743
-    ## 11 original_csv/fhvhv_tripdata_2020-11.csv  698.0638
-    ## 12 original_csv/fhvhv_tripdata_2020-12.csv  700.6804
+    ##                                               file   size_Mb
+    ## 1  original_csv/2020/01/fhvhv_tripdata_2020-01.csv 1243.4975
+    ## 2  original_csv/2020/02/fhvhv_tripdata_2020-02.csv 1313.2442
+    ## 3  original_csv/2020/03/fhvhv_tripdata_2020-03.csv  808.5597
+    ## 4  original_csv/2020/04/fhvhv_tripdata_2020-04.csv  259.5806
+    ## 5  original_csv/2020/05/fhvhv_tripdata_2020-05.csv  366.5430
+    ## 6  original_csv/2020/06/fhvhv_tripdata_2020-06.csv  454.5977
+    ## 7  original_csv/2020/07/fhvhv_tripdata_2020-07.csv  599.2560
+    ## 8  original_csv/2020/08/fhvhv_tripdata_2020-08.csv  667.6880
+    ## 9  original_csv/2020/09/fhvhv_tripdata_2020-09.csv  728.5463
+    ## 10 original_csv/2020/10/fhvhv_tripdata_2020-10.csv  798.4743
+    ## 11 original_csv/2020/11/fhvhv_tripdata_2020-11.csv  698.0638
+    ## 12 original_csv/2020/12/fhvhv_tripdata_2020-12.csv  700.6804
 
 We can already guess based on these file sizes that with only 8 Gb of
 RAM available we’re going to have a problem.
@@ -245,45 +252,36 @@ provided by the city of New York convert it to parquet using the `arrow`
 package. This is a one-time up-front cost that may be expensive in terms
 of time and/or computational resources. If you plan to work with the
 data a lot it will be well worth it because it allows subsequent reads
-to be fast and selective.
+to be faster and more memory efficent.
 
 ``` r
 library(arrow)
 
-## This is the most complicated section of code in this workshop.
-## If your eyes start to glaze over, stick with it! It's not as complicated
-## as it might look, and things get better from here.
 if(!dir.exists("converted_parquet")) {
-  ## create vector of output file names
-  outnames <- paste("converted_parquet", 
-                    "2020", 
-                    sprintf("%02d", 1:12), 
-                    "fhvhv_tripdata.parquet", 
-                    sep = "/")
-  ## convert csv to parquet
-  for (i in 1:length(fhvhv_csv_files)) {
-    dir.create(dirname(outnames[i]),recursive = TRUE, showWarnings = FALSE)
-    write_parquet(read_csv_arrow(fhvhv_csv_files[i],
-                                 as_data_frame=FALSE), 
-                  outnames[i])
-    gc()
-  }
+  dir.create("converted_parquet")
+  ## this doesn't yet read the data in, it only creates a connection
+  csv_ds <- open_dataset("original_csv", 
+                         format = "csv",
+                         partitioning = c("year", "month"))
+  write_dataset(csv_ds, 
+                "converted_parquet", 
+                format = "parquet",
+                partitioning = c("year", "month"))
 }
 ```
 
-This conversion is relatively easy (even with our artificially limited
-memory) because the upstream data provider are already using one of our
-strategies, i.e., they partitioned the data by year/month. This allows
-us to convert each file one at a time, without ever needing to read in
-all the data at once.
+This conversion is relatively easy (even with limited memory) because
+the data provider is already using one of our strategies, i.e., they
+partitioned the data by year/month. This allows us to convert each file
+one at a time, without ever needing to read in all the data at once.
 
 We also took some care to partition the data into `year/month`
-sub-directories. This is important because arrow treats data stored in
-this way as a unified data set even though it is partioned into multiple
-files.
+sub-directories using what is known as “hive-style” partitioning. This
+is important because it makes it easy for `arrow` to automatically
+recognize the partitions.
 
-We can look at the converted files and compare the storage requirements
-to the original CSV data.
+We can look at the converted files and compare the nameing scheme and
+storage requirements to the original CSV data.
 
 ``` r
 fhvhv_files <- list.files("converted_parquet", full.names = TRUE, recursive = TRUE)
@@ -293,60 +291,57 @@ data.frame(csv_file = fhvhv_csv_files,
            parquet_size_Mb = file.size(fhvhv_files) / 1024^2)
 ```
 
-    ##                                   csv_file
-    ## 1  original_csv/fhvhv_tripdata_2020-01.csv
-    ## 2  original_csv/fhvhv_tripdata_2020-02.csv
-    ## 3  original_csv/fhvhv_tripdata_2020-03.csv
-    ## 4  original_csv/fhvhv_tripdata_2020-04.csv
-    ## 5  original_csv/fhvhv_tripdata_2020-05.csv
-    ## 6  original_csv/fhvhv_tripdata_2020-06.csv
-    ## 7  original_csv/fhvhv_tripdata_2020-07.csv
-    ## 8  original_csv/fhvhv_tripdata_2020-08.csv
-    ## 9  original_csv/fhvhv_tripdata_2020-09.csv
-    ## 10 original_csv/fhvhv_tripdata_2020-10.csv
-    ## 11 original_csv/fhvhv_tripdata_2020-11.csv
-    ## 12 original_csv/fhvhv_tripdata_2020-12.csv
-    ##                                        parquet_file csv_size_Mb parquet_size_Mb
-    ## 1  converted_parquet/2020/01/fhvhv_tripdata.parquet   1243.4975       221.37902
-    ## 2  converted_parquet/2020/02/fhvhv_tripdata.parquet   1313.2442       232.82627
-    ## 3  converted_parquet/2020/03/fhvhv_tripdata.parquet    808.5597       143.00006
-    ## 4  converted_parquet/2020/04/fhvhv_tripdata.parquet    259.5806        48.04683
-    ## 5  converted_parquet/2020/05/fhvhv_tripdata.parquet    366.5430        66.89160
-    ## 6  converted_parquet/2020/06/fhvhv_tripdata.parquet    454.5977        82.20870
-    ## 7  converted_parquet/2020/07/fhvhv_tripdata.parquet    599.2560       107.53598
-    ## 8  converted_parquet/2020/08/fhvhv_tripdata.parquet    667.6880       119.42568
-    ## 9  converted_parquet/2020/09/fhvhv_tripdata.parquet    728.5463       130.06381
-    ## 10 converted_parquet/2020/10/fhvhv_tripdata.parquet    798.4743       142.01453
-    ## 11 converted_parquet/2020/11/fhvhv_tripdata.parquet    698.0638       124.23919
-    ## 12 converted_parquet/2020/12/fhvhv_tripdata.parquet    700.6804       125.16402
+    ##                                           csv_file
+    ## 1  original_csv/2020/01/fhvhv_tripdata_2020-01.csv
+    ## 2  original_csv/2020/02/fhvhv_tripdata_2020-02.csv
+    ## 3  original_csv/2020/03/fhvhv_tripdata_2020-03.csv
+    ## 4  original_csv/2020/04/fhvhv_tripdata_2020-04.csv
+    ## 5  original_csv/2020/05/fhvhv_tripdata_2020-05.csv
+    ## 6  original_csv/2020/06/fhvhv_tripdata_2020-06.csv
+    ## 7  original_csv/2020/07/fhvhv_tripdata_2020-07.csv
+    ## 8  original_csv/2020/08/fhvhv_tripdata_2020-08.csv
+    ## 9  original_csv/2020/09/fhvhv_tripdata_2020-09.csv
+    ## 10 original_csv/2020/10/fhvhv_tripdata_2020-10.csv
+    ## 11 original_csv/2020/11/fhvhv_tripdata_2020-11.csv
+    ## 12 original_csv/2020/12/fhvhv_tripdata_2020-12.csv
+    ##                                           parquet_file csv_size_Mb
+    ## 1   converted_parquet/year=2020/month=1/part-0.parquet   1243.4975
+    ## 2  converted_parquet/year=2020/month=10/part-0.parquet   1313.2442
+    ## 3  converted_parquet/year=2020/month=11/part-0.parquet    808.5597
+    ## 4  converted_parquet/year=2020/month=12/part-0.parquet    259.5806
+    ## 5   converted_parquet/year=2020/month=2/part-0.parquet    366.5430
+    ## 6   converted_parquet/year=2020/month=3/part-0.parquet    454.5977
+    ## 7   converted_parquet/year=2020/month=4/part-0.parquet    599.2560
+    ## 8   converted_parquet/year=2020/month=5/part-0.parquet    667.6880
+    ## 9   converted_parquet/year=2020/month=6/part-0.parquet    728.5463
+    ## 10  converted_parquet/year=2020/month=7/part-0.parquet    798.4743
+    ## 11  converted_parquet/year=2020/month=8/part-0.parquet    698.0638
+    ## 12  converted_parquet/year=2020/month=9/part-0.parquet    700.6804
+    ##    parquet_size_Mb
+    ## 1        190.26387
+    ## 2        125.17837
+    ## 3        110.92145
+    ## 4        111.67697
+    ## 5        198.87074
+    ## 6        127.53637
+    ## 7         48.32047
+    ## 8         64.17768
+    ## 9         76.45972
+    ## 10        97.99151
+    ## 11       107.80694
+    ## 12       115.25221
 
 As expected, the binary parquet storage format is much more compact than
 the text-based CSV format. This is one reason that reading parquet data
 is so much faster:
 
 ``` r
-## standard R csv reader
+## tidyverse csv reader
 system.time(invisible(readr::read_csv(fhvhv_csv_files[[1]], show_col_types = FALSE)))
 ```
 
     ##    user  system elapsed 
-    ##  75.765   3.516  28.132
-
-``` r
-## fread from the data.table package
-system.time(invisible(data.table::fread(fhvhv_csv_files[[1]])))
-```
-
-    ##    user  system elapsed 
-    ##   9.621   1.000   5.490
-
-``` r
-## arrow package csv reader
-system.time(invisible(read_csv_arrow(fhvhv_csv_files[[1]])))
-```
-
-    ##    user  system elapsed 
-    ##  11.580   4.353   8.863
+    ##  75.722   5.449  28.835
 
 ``` r
 ## arrow package parquet reader
@@ -354,9 +349,9 @@ system.time(invisible(read_parquet(fhvhv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##   4.295   1.850   2.901
+    ##   4.903   2.306  18.845
 
-### Read just the Uber records and count them
+### Read and count Uber records with arrow
 
 The `arrow` package makes it easy to read and process only the data we
 need for a particular calculation. It allows us to use the partitioned
@@ -367,13 +362,22 @@ Start by creating a dataset representation from the partitioned data
 directory:
 
 ``` r
-fhvhv_ds <- open_dataset(
-  "converted_parquet", 
-  partitioning = c("year", "month"))
+fhvhv_ds <- open_dataset("converted_parquet",
+                         schema = schema(hvfhs_license_num=string(),
+                                         dispatching_base_num=string(),
+                                         pickup_datetime=string(),
+                                         dropoff_datetime=string(),
+                                         PULocationID=int64(),
+                                         DOLocationID=int64(),
+                                         SR_Flag=int64(),
+                                         year=int32(),
+                                         month=int32()))
 ```
 
-the `year` and `month` partitioning argument corresponds to the two
-levels of the directory structure we created earlier.
+Because we have hive-style directory names `open_dataset` automatically
+recognizes the partitions. Note that usually we do not need to manually
+specify the `schema`, we do so here to work around an issue with
+`duckdb` support.
 
 Importantly, `open_dataset` doesn’t actually read the data into memory.
 It just opens a connection to the dataset and makes it easy for us to
@@ -404,6 +408,69 @@ This is a tremendous improvement over the typical R workflow, and may
 well be all you need to start using your large datasets more quickly and
 conveniently, even on modest hardware.
 
+### Efficiently query taxi data with duckdb
+
+If you need even more speed and convenience you can try the `duckdb`
+package. It allows you to query the same parquet datasets partitioned on
+disk as we did above. You can use either SQL statements via the `DBI`
+package or tidyverse style verbs using `dbplyr`. Let’s see how it works.
+
+First we create a `duckdb` table from our `arrow` dataset.
+
+``` r
+library(duckdb)
+library(DBI)
+library(dplyr)
+
+con <- DBI::dbConnect(duckdb::duckdb())
+to_duckdb(fhvhv_ds, con, "fhvhv")
+```
+
+    ## # Source:   table<fhvhv> [?? x 9]
+    ## # Database: duckdb_connection
+    ##    hvfhs_license_num dispatching_base_num pickup_datetime     dropoff_datetime  
+    ##    <chr>             <chr>                <chr>               <chr>             
+    ##  1 HV0003            B02864               2020-01-01 00:45:3… 2020-01-01 01:02:…
+    ##  2 HV0003            B02682               2020-01-01 00:47:5… 2020-01-01 00:53:…
+    ##  3 HV0003            B02764               2020-01-01 00:04:3… 2020-01-01 00:21:…
+    ##  4 HV0003            B02764               2020-01-01 00:26:3… 2020-01-01 00:33:…
+    ##  5 HV0003            B02764               2020-01-01 00:37:4… 2020-01-01 00:46:…
+    ##  6 HV0003            B02764               2020-01-01 00:49:2… 2020-01-01 01:07:…
+    ##  7 HV0003            B02870               2020-01-01 00:21:1… 2020-01-01 00:36:…
+    ##  8 HV0003            B02870               2020-01-01 00:38:2… 2020-01-01 00:42:…
+    ##  9 HV0003            B02870               2020-01-01 00:46:2… 2020-01-01 01:09:…
+    ## 10 HV0003            B02836               2020-01-01 00:15:3… 2020-01-01 00:23:…
+    ## # … with more rows, and 5 more variables: PULocationID <dbl>,
+    ## #   DOLocationID <dbl>, SR_Flag <dbl>, year <int>, month <int>
+
+The `duckdb` table can be queried using tidyverse style verbs or SQL.
+
+``` r
+## number of Uber trips, tidyverse style
+tbl(con,"fhvhv") %>%
+  filter(hvfhs_license_num == "HV0003") %>%
+  select(hvfhs_license_num) %>%
+  count()
+```
+
+    ## # Source:   lazy query [?? x 1]
+    ## # Database: duckdb_connection
+    ##           n
+    ##       <dbl>
+    ## 1 103112054
+
+``` r
+## number of Uber trips, SQL style
+y <- dbSendQuery(con, "SELECT COUNT(*) FROM fhvhv WHERE hvfhs_license_num=='HV0003';")
+dbFetch(y)
+```
+
+    ##   count_star()
+    ## 1    103112054
+
+The main advantages of `duckdb` are that it has full SQL support and is
+optimized for speed.
+
 ## Your turn!
 
 Now that you understand some of the basic techniques for working with
@@ -412,4 +479,15 @@ learned. Using the same taxi data, try answering the following
 questions:
 
 -   What percentage of trips are made by Lyft?
--   What percentage of trips start between 10:00PM and Midnight?
+-   In which month did Uber log the most trips?
+
+Documentation for these data can be found at
+<https://www1.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_hvfhs.pdf>
+
+## Additional resources
+
+-   [Arrow R package documentation](https://arrow.apache.org/docs/r/)
+-   [Arrow Python package
+    documentation](https://arrow.apache.org/docs/python/)
+-   [DuckDB documentation](https://duckdb.org/docs/)
+-   
