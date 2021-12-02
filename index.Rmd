@@ -15,8 +15,8 @@ The examples and exercises require R and several R packages. If you do not yet h
 
 Once you have R installed you can proceed to install the required packages:
 
-```{r, eval=FALSE}
-install.packages(c("tidyverse", "data.table", "arrow", "duckdb"))
+```{r eval=FALSE}
+#install.packages(c("tidyverse", "data.table", "arrow", "duckdb"))
 ```
 
 Once those are is installed please take a moment to download the data used in the examples and exercises. You can do it from R if you wish:
@@ -28,6 +28,7 @@ if(!file.exists("original_csv.zip")) {
 }
 ```
 
+<!-- #region tags=[] -->
 Documentation for these data can be found at https://www1.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_hvfhs.pdf
 
 ## Nature and Scope of the Problem: What is Large Data?
@@ -38,9 +39,9 @@ A common definition of "big data" is "data that is too big to process using trad
 
 In a typical (traditional) program, we start with data on disk, in some format. We read it in to memory, do some stuff to it on the CPU, store the results of that stuff back in memory, then write those results back to disk so they can be available for the future, as depicted below.
 
-![Flow of Data in A Program](images/Computer Data Flow.png)
+![Flow of Data in A Program](images/ComputerDataFlow.png)
 The reason most data analysis software is designed to process data this way is because "doing some stuff" is much much faster in RAM than it is if you have to read values from disk every time you need them. The downside is that RAM is much more expensive than disk storage, and typically available in smaller quantities. Memory can only hold so much data and we must either stay under that limit or buy more memory.
-
+<!-- #endregion -->
 
 ## Problem example
 
@@ -56,12 +57,12 @@ data.frame(file = fhvhv_csv_files, size_Mb = file.size(fhvhv_csv_files) / 1024^2
 
 We can already guess based on these file sizes that with only 8 Gb of RAM available we're going to have a problem.
 
-```{r, eval=FALSE}
+```{r eval=FALSE}
 library(arrow)
 fhvhv_data <- do.call(rbind, lapply(fhvhv_csv_files, read_csv_arrow))
 ```
 
-```{r, echo=FALSE, error=TRUE}
+```{r echo=FALSE, error=TRUE}
 stop("cannot allocate vector of size 7.6 Mb")
 ```
 
@@ -69,7 +70,7 @@ Perhaps you've seen similar messages before. Basically it means that we don't ha
 
 If you're working with data large enough to hit the dreaded `cannot allocate vector` error when running your code, you've got a problem. When using your naive workflow, you're trying to fit too large an object through the limit of your system's memory.
 
-![The Evergiven (please put her back)](images/big boat.jpg)
+![The Evergiven](images/bigboat.png)
 *An example of a large object causing a bottleneck*
 
 When you hit a  memory bottleneck (assuming it's not caused by a simple to fix bug in your code), there is no magic quick solution to getting around the issue. A number of resources that need to be considered when developing any solution:
@@ -132,7 +133,7 @@ Now that we have some theoretical foundations to build on we can start putting t
 
 The first step is to take the slow and inefficient text-based data provided by the city of New York convert it to parquet using the `arrow` package. This is a one-time up-front cost that may be expensive in terms of time and/or computational resources. If you plan to work with the data a lot it will be well worth it because it allows subsequent reads to be faster and more memory efficent.
 
-```{r, message=FALSE}
+```{r message=FALSE}
 library(arrow)
 
 if(!dir.exists("converted_parquet")) {
@@ -164,12 +165,12 @@ data.frame(csv_file = fhvhv_csv_files,
 
 As expected, the binary parquet storage format is much more compact than the text-based CSV format. This is one reason that reading parquet data is so much faster:
 
-```{r, message=FALSE}
+```{r message=FALSE}
 ## tidyverse csv reader
 system.time(invisible(readr::read_csv(fhvhv_csv_files[[1]], show_col_types = FALSE)))
 ## arrow package parquet reader
 system.time(invisible(read_parquet(fhvhv_files[[1]])))
-``` 
+```
 
 ### Read and count Lyft records with arrow
 
@@ -212,7 +213,7 @@ The `arrow` package makes it fast and easy to query on-disk data and read in onl
 If you need even more speed and convenience you can try the `duckdb` package. It allows you to query the same parquet datasets partitioned on disk as we did above. You can use either SQL statements via the `DBI` package or tidyverse style verbs using `dbplyr`. Let's see how it works.
 
 First we create a `duckdb` table from our `arrow` dataset.
-```{r, message=FALSE}
+```{r message=FALSE}
 library(duckdb)
 library(DBI)
 library(dplyr)

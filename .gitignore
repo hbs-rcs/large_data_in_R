@@ -2,3 +2,5 @@
 *.parquet
 *.csv
 *.zip
+.ipynb_checkpoints/index-checkpoint.Rmd
+.virtual_documents/index.Rmd
