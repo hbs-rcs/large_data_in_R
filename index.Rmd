@@ -9,8 +9,6 @@ date: "Updated `r format(Sys.Date(), '%B %d, %Y')`"
 
 ## Environment Set Up
 
-**PLEASE DO THIS BEFORE THE WORKSHOP**
-
 The examples and exercises require R and several R packages. If you do not yet have R installed you can do so following the instructions at https://cran.r-project.org/ . You may also wish to install Rstudio from https://www.rstudio.com/products/rstudio/download/#download
 
 Once you have R installed you can proceed to install the required packages:
@@ -28,7 +26,6 @@ if(!file.exists("original_csv.zip")) {
 }
 ```
 
-<!-- #region tags=[] -->
 Documentation for these data can be found at https://www1.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_hvfhs.pdf
 
 ## Nature and Scope of the Problem: What is Large Data?
@@ -41,7 +38,6 @@ In a typical (traditional) program, we start with data on disk, in some format. 
 
 ![Flow of Data in A Program](images/ComputerDataFlow.png)
 The reason most data analysis software is designed to process data this way is because "doing some stuff" is much much faster in RAM than it is if you have to read values from disk every time you need them. The downside is that RAM is much more expensive than disk storage, and typically available in smaller quantities. Memory can only hold so much data and we must either stay under that limit or buy more memory.
-<!-- #endregion -->
 
 ## Problem example
 

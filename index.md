@@ -30,8 +30,6 @@ Updated December 02, 2021
 
 ## Environment Set Up
 
-**PLEASE DO THIS BEFORE THE WORKSHOP**
-
 The examples and exercises require R and several R packages. If you do
 not yet have R installed you can do so following the instructions at
 <https://cran.r-project.org/> . You may also wish to install Rstudio
@@ -41,7 +39,7 @@ Once you have R installed you can proceed to install the required
 packages:
 
 ``` r
-install.packages(c("tidyverse", "data.table", "arrow", "duckdb"))
+#install.packages(c("tidyverse", "data.table", "arrow", "duckdb"))
 ```
 
 Once those are is installed please take a moment to download the data
@@ -53,8 +51,6 @@ if(!file.exists("original_csv.zip")) {
   unzip("original_csv.zip")
 }
 ```
-
-<!-- #region tags=[] -->
 
 Documentation for these data can be found at
 <https://www1.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_hvfhs.pdf>
@@ -88,7 +84,6 @@ have to read values from disk every time you need them. The downside is
 that RAM is much more expensive than disk storage, and typically
 available in smaller quantities. Memory can only hold so much data and
 we must either stay under that limit or buy more memory.
-<!-- #endregion -->
 
 ## Problem example
 
@@ -363,7 +358,7 @@ system.time(invisible(readr::read_csv(fhvhv_csv_files[[1]], show_col_types = FAL
 ```
 
     ##    user  system elapsed 
-    ##  56.336   2.729  20.744
+    ##  52.670   2.531  19.056
 
 ``` r
 ## arrow package parquet reader
@@ -371,7 +366,7 @@ system.time(invisible(read_parquet(fhvhv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##   3.590   1.220   8.027
+    ##   4.583   1.353   3.034
 
 ### Read and count Lyft records with arrow
 
