@@ -14,13 +14,15 @@ Updated December 02, 2021
         computation](#partition-the-data-on-disk-to-facilitate-chunked-access-and-computation)
     -   [Only read in the data you
         need](#only-read-in-the-data-you-need)
+    -   [Use streaming data tools and
+        algorithms](#use-streaming-data-tools-and-algorithms)
     -   [Avoid unnecessarily storing or duplicating data in
         memory](#avoid-unnecessarily-storing-or-duplicating-data-in-memory)
     -   [Technique summary](#technique-summary)
 -   [Solution example](#solution-example)
     -   [Convert .csv to parquet](#convert-csv-to-parquet)
-    -   [Read and count Uber records with
-        arrow](#read-and-count-uber-records-with-arrow)
+    -   [Read and count Lyft records with
+        arrow](#read-and-count-lyft-records-with-arrow)
     -   [Efficiently query taxi data with
         duckdb](#efficiently-query-taxi-data-with-duckdb)
 -   [Your turn!](#your-turn)
@@ -88,7 +90,7 @@ we must either stay under that limit or buy more memory.
 ## Problem example
 
 Grounding our discussion in a concrete problem example will help make
-things clear. **I want to know how many Uber rides were taken in New
+things clear. **I want to know how many Lyft rides were taken in New
 York City during 2020**. The data is publicly available as documented at
 <https://www1.nyc.gov/site/tlc/about/tlc-trip-record-data.page> and I
 have made a subset available on dropbox as described in the Setup
@@ -169,9 +171,10 @@ a single node goes up to 1200 per month.
 
 ## General strategies and principles
 
-Recall that **I want to know how many Uber rides were taken in New York
-City during 2020**. Part of the probelm with our first attempt is that
+Recall that **I want to know how many Lyft rides were taken in New York
+City during 2020**. Part of the problem with our first attempt is that
 CSV files do not make it easy to quickly read subsets or select columns.
+In this section we’ll spend some time articulating
 
 ### Use a fast binary data storage format that enables reading data subsets
 
@@ -211,10 +214,22 @@ year/month.
 
 If we think carefully about it we’ll see that our previous attempt to
 process the taxi data by reading in all the data at once was wasteful.
-Not all the rows are Uber rides, and the only column I really need is
-the one that tells me if the ride was an Uber or not. I can perform the
+Not all the rows are Lyft rides, and the only column I really need is
+the one that tells me if the ride was an Lyft or not. I can perform the
 computation I need by only reading in that one column, and only the rows
-for which the `Hvfhs_license_num` column is equal to `HV0003` (Uber).
+for which the `Hvfhs_license_num` column is equal to `HV0005` (Lyft).
+
+### Use streaming data tools and algorithms
+
+It’s all fine and good to say “only read the data you need”, but how do
+you actually do that? Unless you have full control over the data
+collection and storage process chances are good that your data provider
+included a bunch of stuff you don’t need. The key is to find a data
+selection and filtering tool that works with streamed data so that you
+can access subsets without ever loading data you don’t need into memory.
+Both the `arrow` and `duckdb` R packages support this type of workflow
+and can dramatically reduce the time and hardware requirements for many
+computations.
 
 ### Avoid unnecessarily storing or duplicating data in memory
 
@@ -223,7 +238,10 @@ data efficiently once we have it loaded in memory. R likes to make
 copies of the data, and while it does try to avoid unnecessary
 duplication this process can be unpredictable. At a minimum you can
 remove or avoid storing intermediate results you don’t need and take
-care not to make copies of your data structures unless you have to.
+care not to make copies of your data structures unless you have to. The
+`data.table` package additionally makes it easier to efficiently modify
+R data objects in-place, reducing the risk of accidentally or
+unknowingly duplicating large data structures.
 
 ### Technique summary
 
@@ -234,11 +252,12 @@ We’ve accumulated a list of helpful techniques! To review:
 -   Partition the data on disk to facilitate chunked access and
     computation
 -   Only read in the data you need
+-   Use streaming data tools and algorithms
 -   Avoid unnecessarily storing or duplicating data in memory
 
 Using these techniques will allow us to overcome the memory limitation
 we ran up against before, and finally answer the question “**How many
-Uber rides were taken in New York City during 2020?**
+Lyft rides were taken in New York City during 2020?**
 
 ## Solution example
 
@@ -280,7 +299,7 @@ sub-directories using what is known as “hive-style” partitioning. This
 is important because it makes it easy for `arrow` to automatically
 recognize the partitions.
 
-We can look at the converted files and compare the nameing scheme and
+We can look at the converted files and compare the naming scheme and
 storage requirements to the original CSV data.
 
 ``` r
@@ -341,7 +360,7 @@ system.time(invisible(readr::read_csv(fhvhv_csv_files[[1]], show_col_types = FAL
 ```
 
     ##    user  system elapsed 
-    ##  75.722   5.449  28.835
+    ##  82.658   6.166  31.517
 
 ``` r
 ## arrow package parquet reader
@@ -349,9 +368,9 @@ system.time(invisible(read_parquet(fhvhv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##   4.903   2.306  18.845
+    ##   5.075   1.746  17.179
 
-### Read and count Uber records with arrow
+### Read and count Lyft records with arrow
 
 The `arrow` package makes it easy to read and process only the data we
 need for a particular calculation. It allows us to use the partitioned
@@ -381,23 +400,23 @@ specify the `schema`, we do so here to work around an issue with
 
 Importantly, `open_dataset` doesn’t actually read the data into memory.
 It just opens a connection to the dataset and makes it easy for us to
-query it. Finally, we can compute the number of NYC Uber trips in 2020,
+query it. Finally, we can compute the number of NYC Lyft trips in 2020,
 even on a machine with limited memory:
 
 ``` r
 library(dplyr, warn.conflicts = FALSE)
 
 fhvhv_ds %>%
-  filter(hvfhs_license_num == "HV0003") %>%
+  filter(hvfhs_license_num == "HV0005") %>%
   select(hvfhs_license_num) %>%
   collect() %>%
-  summarize(total_uber_trips = n())
+  summarize(total_Lyft_trips = n())
 ```
 
     ## # A tibble: 1 × 1
-    ##   total_uber_trips
+    ##   total_Lyft_trips
     ##              <int>
-    ## 1        103112054
+    ## 1         37250101
 
 Note that `arrow` datasets do not support `summarize` natively, that is
 why we call `collect` first to actually read in the data.
@@ -446,30 +465,31 @@ to_duckdb(fhvhv_ds, con, "fhvhv")
 The `duckdb` table can be queried using tidyverse style verbs or SQL.
 
 ``` r
-## number of Uber trips, tidyverse style
+## number of Lyft trips, tidyverse style
 tbl(con,"fhvhv") %>%
-  filter(hvfhs_license_num == "HV0003") %>%
+  filter(hvfhs_license_num == "HV0005") %>%
   select(hvfhs_license_num) %>%
   count()
 ```
 
     ## # Source:   lazy query [?? x 1]
     ## # Database: duckdb_connection
-    ##           n
-    ##       <dbl>
-    ## 1 103112054
+    ##          n
+    ##      <dbl>
+    ## 1 37250101
 
 ``` r
-## number of Uber trips, SQL style
-y <- dbSendQuery(con, "SELECT COUNT(*) FROM fhvhv WHERE hvfhs_license_num=='HV0003';")
+## number of Lyft trips, SQL style
+y <- dbSendQuery(con, "SELECT COUNT(*) FROM fhvhv WHERE hvfhs_license_num=='HV0005';")
 dbFetch(y)
 ```
 
     ##   count_star()
-    ## 1    103112054
+    ## 1     37250101
 
-The main advantages of `duckdb` are that it has full SQL support and is
-optimized for speed.
+The main advantages of `duckdb` are that it has full SQL support,
+supports streaming aggregation, and allows you to set memory limits and
+is optimized for speed.
 
 ## Your turn!
 
@@ -479,7 +499,7 @@ learned. Using the same taxi data, try answering the following
 questions:
 
 -   What percentage of trips are made by Lyft?
--   In which month did Uber log the most trips?
+-   In which month did Lyft log the most trips?
 
 Documentation for these data can be found at
 <https://www1.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_hvfhs.pdf>

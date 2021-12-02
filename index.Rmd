@@ -44,7 +44,7 @@ The reason most data analysis software is designed to process data this way is b
 
 ## Problem example
 
-Grounding our discussion in a concrete problem example will help make things clear. **I want to know how many Uber rides were taken in New York City during 2020**. The data is publicly available as documented at https://www1.nyc.gov/site/tlc/about/tlc-trip-record-data.page and I have made a subset available on dropbox as described in the Setup section above for convenience. Documentation can be found at https://www1.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_hvfhs.pdf
+Grounding our discussion in a concrete problem example will help make things clear. **I want to know how many Lyft rides were taken in New York City during 2020**. The data is publicly available as documented at https://www1.nyc.gov/site/tlc/about/tlc-trip-record-data.page and I have made a subset available on dropbox as described in the Setup section above for convenience. Documentation can be found at https://www1.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_hvfhs.pdf
 
 In order to demonstrate large data problems and solutions I'm going to artificially limit my system to 8Gb of memory. This will allow is to quickly see what happens when we reach the memory limit, and to look at solutions to that problem without waiting for our program to read in hundreds of Gb of data. On Linux memory can be artificially limited using the `ulimit` command before starting R, e.g., `ulimit -Sv 8000000`.
 
@@ -85,7 +85,7 @@ A simple solution to a large data problem is just to throw more memory at it. De
 
 ## General strategies and principles
 
-Recall that **I want to know how many Uber rides were taken in New York City during 2020**. Part of the probelm with our first attempt is that CSV files do not make it easy to quickly read subsets or select columns. 
+Recall that **I want to know how many Lyft rides were taken in New York City during 2020**. Part of the problem with our first attempt is that CSV files do not make it easy to quickly read subsets or select columns. In this section we'll spend some time articulating 
 
 ### Use a fast binary data storage format that enables reading data subsets
 
@@ -101,11 +101,15 @@ Memory requirements can be reduced by partitioning the data and computation into
 
 ### Only read in the data you need
 
-If we think carefully about it we'll see that our previous attempt to process the taxi data by reading in all the data at once was wasteful. Not all the rows are Uber rides, and the only column I really need is the one that tells me if the ride was an Uber or not. I can perform the computation I need by only reading in that one column, and only the rows for which the `Hvfhs_license_num` column is equal to `HV0003` (Uber).
+If we think carefully about it we'll see that our previous attempt to process the taxi data by reading in all the data at once was wasteful. Not all the rows are Lyft rides, and the only column I really need is the one that tells me if the ride was an Lyft or not. I can perform the computation I need by only reading in that one column, and only the rows for which the `Hvfhs_license_num` column is equal to `HV0005` (Lyft).
+
+### Use streaming data tools and algorithms
+
+It's all fine and good to say "only read the data you need", but how do you actually do that? Unless you have full control over the data collection and storage process chances are good that your data provider included a bunch of stuff you don't need. The key is to find a data selection and filtering tool that works with streamed data so that you can access subsets without ever loading data you don't need into memory. Both the `arrow` and `duckdb` R packages support this type of workflow and can dramatically reduce the time and hardware requirements for many computations.
 
 ### Avoid unnecessarily storing or duplicating data in memory
 
-It is also important to pay some attention to storing and processing data efficiently once we have it loaded in memory. R likes to make copies of the data, and while it does try to avoid unnecessary duplication this process can be unpredictable. At a minimum you can remove or avoid storing intermediate results you don't need and take care not to make copies of your data structures unless you have to.
+It is also important to pay some attention to storing and processing data efficiently once we have it loaded in memory. R likes to make copies of the data, and while it does try to avoid unnecessary duplication this process can be unpredictable. At a minimum you can remove or avoid storing intermediate results you don't need and take care not to make copies of your data structures unless you have to. The `data.table` package additionally makes it easier to efficiently modify R data objects in-place, reducing the risk of accidentally or unknowingly duplicating large data structures. 
 
 ### Technique summary
 
@@ -114,9 +118,10 @@ We've accumulated a list of helpful techniques! To review:
 - Use a fast binary data storage format that enables reading data subsets
 - Partition the data on disk to facilitate chunked access and computation
 - Only read in the data you need
+- Use streaming data tools and algorithms
 - Avoid unnecessarily storing or duplicating data in memory
 
-Using these techniques will allow us to overcome the memory limitation we ran up against before, and finally answer the question "**How many Uber rides were taken in New York City during 2020?**
+Using these techniques will allow us to overcome the memory limitation we ran up against before, and finally answer the question "**How many Lyft rides were taken in New York City during 2020?**
 
 
 ## Solution example
@@ -147,7 +152,7 @@ This conversion is relatively easy (even with limited memory) because the data p
 
 We also took some care to partition the data into `year/month` sub-directories using what is known as "hive-style" partitioning. This is important because it makes it easy for `arrow` to automatically recognize the partitions.
 
-We can look at the converted files and compare the nameing scheme and storage requirements to the original CSV data.
+We can look at the converted files and compare the naming scheme and storage requirements to the original CSV data.
 
 ```{r}
 fhvhv_files <- list.files("converted_parquet", full.names = TRUE, recursive = TRUE)
@@ -164,9 +169,9 @@ As expected, the binary parquet storage format is much more compact than the tex
 system.time(invisible(readr::read_csv(fhvhv_csv_files[[1]], show_col_types = FALSE)))
 ## arrow package parquet reader
 system.time(invisible(read_parquet(fhvhv_files[[1]])))
-```
+``` 
 
-### Read and count Uber records with arrow
+### Read and count Lyft records with arrow
 
 The `arrow` package makes it easy to read and process only the data we need for a particular calculation. It allows us to use the partitioned data directories we created earlier as a single dataset and to query it using the `dplyr` verbs many R users are already familiar with.
 
@@ -187,16 +192,16 @@ fhvhv_ds <- open_dataset("converted_parquet",
 
 Because we have hive-style directory names `open_dataset` automatically recognizes the partitions. Note that usually we do not need to manually specify the `schema`, we do so here to work around an issue with `duckdb` support.
 
-Importantly, `open_dataset` doesn't actually read the data into memory. It just opens a connection to the dataset and makes it easy for us to query it. Finally, we can compute the number of NYC Uber trips in 2020, even on a machine with limited memory:
+Importantly, `open_dataset` doesn't actually read the data into memory. It just opens a connection to the dataset and makes it easy for us to query it. Finally, we can compute the number of NYC Lyft trips in 2020, even on a machine with limited memory:
 
 ```{r}
 library(dplyr, warn.conflicts = FALSE)
 
 fhvhv_ds %>%
-  filter(hvfhs_license_num == "HV0003") %>%
+  filter(hvfhs_license_num == "HV0005") %>%
   select(hvfhs_license_num) %>%
   collect() %>%
-  summarize(total_uber_trips = n())
+  summarize(total_Lyft_trips = n())
 ```
 Note that `arrow` datasets do not support `summarize` natively, that is why we call `collect` first to actually read in the data.
 
@@ -218,24 +223,25 @@ to_duckdb(fhvhv_ds, con, "fhvhv")
 
 The `duckdb` table can be queried using tidyverse style verbs or SQL.
 ```{r}
-## number of Uber trips, tidyverse style
+## number of Lyft trips, tidyverse style
 tbl(con,"fhvhv") %>%
-  filter(hvfhs_license_num == "HV0003") %>%
+  filter(hvfhs_license_num == "HV0005") %>%
   select(hvfhs_license_num) %>%
   count()
 
-## number of Uber trips, SQL style
-y <- dbSendQuery(con, "SELECT COUNT(*) FROM fhvhv WHERE hvfhs_license_num=='HV0003';")
+## number of Lyft trips, SQL style
+y <- dbSendQuery(con, "SELECT COUNT(*) FROM fhvhv WHERE hvfhs_license_num=='HV0005';")
 dbFetch(y)
 ```
-The main advantages of `duckdb` are that it has full SQL support and is optimized for speed.
+The main advantages of `duckdb` are that it has full SQL support, supports streaming aggregation, and allows you to set memory limits and is optimized for speed.
+
 
 ## Your turn!
 
 Now that you understand some of the basic techniques for working with large data and have seen an example, you can start to apply what you've learned. Using the same taxi data, try answering the following questions:
 
 - What percentage of trips are made by Lyft?
-- In which month did Uber log the most trips?
+- In which month did Lyft log the most trips?
 
 Documentation for these data can be found at https://www1.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_hvfhs.pdf
 
