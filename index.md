@@ -42,8 +42,15 @@ packages:
 #install.packages(c("tidyverse", "data.table", "arrow", "duckdb"))
 ```
 
-Once those are is installed please take a moment to download the data
-used in the examples and exercises. You can do it from R if you wish:
+Once those are installed please take a moment to download and extract
+the data used in the examples and exercises from
+<https://www.dropbox.com/s/vbodicsu591o7lf/original_csv.zip?dl=1> (this
+is a 1.3Gb zip file). These data record for-hire vehicle (aka “ride
+sharing”) trips in NYC in 2020. Each row contains the record of a trip
+and the variable descriptions can be found in
+<https://www1.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_hvfhs.pdf>
+
+You can download it using R if you wish:
 
 ``` r
 if(!file.exists("original_csv.zip")) {
@@ -51,9 +58,6 @@ if(!file.exists("original_csv.zip")) {
   unzip("original_csv.zip")
 }
 ```
-
-Documentation for these data can be found at
-<https://www1.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_hvfhs.pdf>
 
 ## Nature and Scope of the Problem: What is Large Data?
 
@@ -172,7 +176,9 @@ a single node goes up to 1200 per month.
 Recall that **I want to know how many Lyft rides were taken in New York
 City during 2020**. Part of the problem with our first attempt is that
 CSV files do not make it easy to quickly read subsets or select columns.
-In this section we’ll spend some time articulating
+In this section we’ll spend some time identifying strategies for working
+with large data and identify some tools that make it easy to implement
+those strategies.
 
 ### Use a fast binary data storage format that enables reading data subsets
 
@@ -358,7 +364,7 @@ system.time(invisible(readr::read_csv(fhvhv_csv_files[[1]], show_col_types = FAL
 ```
 
     ##    user  system elapsed 
-    ##  52.670   2.531  19.056
+    ##  53.987   2.332  19.195
 
 ``` r
 ## arrow package parquet reader
@@ -366,7 +372,7 @@ system.time(invisible(read_parquet(fhvhv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##   4.583   1.353   3.034
+    ##   4.181   1.350   2.834
 
 ### Read and count Lyft records with arrow
 
