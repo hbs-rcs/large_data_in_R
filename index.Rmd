@@ -43,7 +43,7 @@ The reason most data analysis software is designed to process data this way is b
 
 Grounding our discussion in a concrete problem example will help make things clear. **I want to know how many Lyft rides were taken in New York City during 2020**. The data is publicly available as documented at https://www1.nyc.gov/site/tlc/about/tlc-trip-record-data.page and I have made a subset available on dropbox as described in the Setup section above for convenience. Documentation can be found at https://www1.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_hvfhs.pdf
 
-In order to demonstrate large data problems and solutions I'm going to artificially limit my system to 8Gb of memory. This will allow is to quickly see what happens when we reach the memory limit, and to look at solutions to that problem without waiting for our program to read in hundreds of Gb of data. On Linux memory can be artificially limited using the `ulimit` command before starting R, e.g., `ulimit -Sv 8000000`.
+In order to demonstrate large data problems and solutions I'm going to artificially limit my system to 8Gb of memory. This will allow is to quickly see what happens when we reach the memory limit, and to look at solutions to that problem without waiting for our program to read in hundreds of Gb of data. (There is no need to follow along with this step, the purpose is just to make sure we all know what happens when you run out of memory.)
 
 Start by looking at the file names and sizes:
 ```{r}

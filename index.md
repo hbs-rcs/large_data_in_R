@@ -103,9 +103,9 @@ In order to demonstrate large data problems and solutions I’m going to
 artificially limit my system to 8Gb of memory. This will allow is to
 quickly see what happens when we reach the memory limit, and to look at
 solutions to that problem without waiting for our program to read in
-hundreds of Gb of data. On Linux memory can be artificially limited
-using the `ulimit` command before starting R, e.g.,
-`ulimit -Sv 8000000`.
+hundreds of Gb of data. (There is no need to follow along with this
+step, the purpose is just to make sure we all know what happens when you
+run out of memory.)
 
 Start by looking at the file names and sizes:
 
@@ -364,7 +364,7 @@ system.time(invisible(readr::read_csv(fhvhv_csv_files[[1]], show_col_types = FAL
 ```
 
     ##    user  system elapsed 
-    ##  53.987   2.332  19.195
+    ##  53.973   2.423  19.099
 
 ``` r
 ## arrow package parquet reader
@@ -372,7 +372,7 @@ system.time(invisible(read_parquet(fhvhv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##   4.181   1.350   2.834
+    ##   3.038   1.179   2.185
 
 ### Read and count Lyft records with arrow
 
