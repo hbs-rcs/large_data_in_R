@@ -167,9 +167,8 @@ how long it’s expected to take, etc, that’s often a decent solution, and
 minimizes the development time needed. However, compute time could still
 be extended, and the resources required to run the program are quite
 expensive. For reference, a single node with 8 cores and 100GB of memory
-costs 300$/month on Amazon. If you need 400GB of memory (which some
-naive approaches using the CMS data I’m familiar with do), the cost for
-a single node goes up to 1200 per month.
+costs 300$/month on Amazon. If you need 400GB of memory the cost for a
+single node goes up to 1200 per month.
 
 ## General strategies and principles
 
@@ -364,7 +363,7 @@ system.time(invisible(readr::read_csv(fhvhv_csv_files[[1]], show_col_types = FAL
 ```
 
     ##    user  system elapsed 
-    ##  53.973   2.423  19.099
+    ##  53.968   2.442  19.240
 
 ``` r
 ## arrow package parquet reader
@@ -372,7 +371,7 @@ system.time(invisible(read_parquet(fhvhv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##   3.038   1.179   2.185
+    ##   3.105   1.213   2.200
 
 ### Read and count Lyft records with arrow
 

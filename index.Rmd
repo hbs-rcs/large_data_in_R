@@ -77,7 +77,7 @@ When you hit a  memory bottleneck (assuming it's not caused by a simple to fix b
     - Number of Nodes
     - Size of Nodes
     
-A simple solution to a large data problem is just to throw more memory at it. Depending on the problem, how often something needs to be run, how long it's expected to take, etc, that's often a decent solution, and minimizes the development time needed. However, compute time could still be extended, and the resources required to run the program are quite expensive. For reference, a single node with 8 cores and 100GB of memory costs 300$/month on Amazon. If you need 400GB of memory (which some naive approaches using the CMS data I'm familiar with do), the cost for a single node goes up to 1200 per month.
+A simple solution to a large data problem is just to throw more memory at it. Depending on the problem, how often something needs to be run, how long it's expected to take, etc, that's often a decent solution, and minimizes the development time needed. However, compute time could still be extended, and the resources required to run the program are quite expensive. For reference, a single node with 8 cores and 100GB of memory costs 300$/month on Amazon. If you need 400GB of memory the cost for a single node goes up to 1200 per month.
 
 
 ## General strategies and principles
