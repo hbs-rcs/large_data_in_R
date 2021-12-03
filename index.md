@@ -100,7 +100,7 @@ section above for convenience. Documentation can be found at
 <https://www1.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_hvfhs.pdf>
 
 In order to demonstrate large data problems and solutions I’m going to
-artificially limit my system to 8Gb of memory. This will allow is to
+artificially limit my system to 8Gb of memory. This will allow us to
 quickly see what happens when we reach the memory limit, and to look at
 solutions to that problem without waiting for our program to read in
 hundreds of Gb of data. (There is no need to follow along with this
@@ -172,12 +172,10 @@ single node goes up to 1200 per month.
 
 ## General strategies and principles
 
-Recall that **I want to know how many Lyft rides were taken in New York
-City during 2020**. Part of the problem with our first attempt is that
-CSV files do not make it easy to quickly read subsets or select columns.
-In this section we’ll spend some time identifying strategies for working
-with large data and identify some tools that make it easy to implement
-those strategies.
+Part of the problem with our first attempt is that CSV files do not make
+it easy to quickly read subsets or select columns. In this section we’ll
+spend some time identifying strategies for working with large data and
+identify some tools that make it easy to implement those strategies.
 
 ### Use a fast binary data storage format that enables reading data subsets
 
@@ -207,37 +205,38 @@ time it takes to get data from disk to memory and back.
 
 Memory requirements can be reduced by partitioning the data and
 computation into chunks, running each one sequentially, and combining
-the results at the end. It is common practice to partition (aka “shard”)
-the data on disk storage to make this computational strategy more
-natural and efficient. For example, the taxi data is already partitioned
-the data by month, i.e., there is a separate data file for each
-year/month.
+the results at the end. It is common practice to partition the data on
+disk storage to make this computational strategy more natural and
+efficient. For example, the taxi data is already partitioned by year and
+month.
 
 ### Only read in the data you need
 
 If we think carefully about it we’ll see that our previous attempt to
 process the taxi data by reading in all the data at once was wasteful.
 Not all the rows are Lyft rides, and the only column I really need is
-the one that tells me if the ride was an Lyft or not. I can perform the
-computation I need by only reading in that one column, and only the rows
-for which the `Hvfhs_license_num` column is equal to `HV0005` (Lyft).
+the one that tells me if the ride was operated by Lyft or not. I can
+perform the computation I need by only reading in that one column, and
+only the rows for which the `hvfhs_license_num` column is equal to
+`HV0005` (Lyft).
 
 ### Use streaming data tools and algorithms
 
 It’s all fine and good to say “only read the data you need”, but how do
 you actually do that? Unless you have full control over the data
-collection and storage process chances are good that your data provider
+collection and storage process, chances are good that your data provider
 included a bunch of stuff you don’t need. The key is to find a data
-selection and filtering tool that works with streamed data so that you
-can access subsets without ever loading data you don’t need into memory.
-Both the `arrow` and `duckdb` R packages support this type of workflow
-and can dramatically reduce the time and hardware requirements for many
-computations.
+selection and filtering tool that works in a streaming fashion so that
+you can access subsets without ever loading data you don’t need into
+memory. Both the `arrow` and `duckdb` R packages support this type of
+workflow and can dramatically reduce the time and hardware requirements
+for many computations.
 
-Moreover, processing streaming data without needing to load it into
-memory is a general technique that can be applied to other tasks as
-well. For example the `duckdb` package allows you to compute some
-summary statistics using data streams.
+Moreover, processing data in a streaming fashion without needing to load
+it into memory is a general technique that can be applied to other tasks
+as well. For example the `duckdb` package allows you to carry out data
+aggregation in a streaming fashion, meaning that you can compute summary
+statistics for data that is too large to fit in memory.
 
 ### Avoid unnecessarily storing or duplicating data in memory
 
@@ -263,33 +262,36 @@ We’ve accumulated a list of helpful techniques! To review:
 -   Use streaming data tools and algorithms
 -   Avoid unnecessarily storing or duplicating data in memory
 
-Using these techniques will allow us to overcome the memory limitation
-we ran up against before, and finally answer the question “**How many
-Lyft rides were taken in New York City during 2020?**
-
 ## Solution example
 
 Now that we have some theoretical foundations to build on we can start
-putting these techniques into practice.
+putting these techniques into practice. Using the techniques identified
+above will allow us to overcome the memory limitation we ran up against
+before, and finally answer the question “**How many Lyft rides were
+taken in New York City during 2020?**”?
 
 ### Convert .csv to parquet
 
 The first step is to take the slow and inefficient text-based data
-provided by the city of New York convert it to parquet using the `arrow`
-package. This is a one-time up-front cost that may be expensive in terms
-of time and/or computational resources. If you plan to work with the
-data a lot it will be well worth it because it allows subsequent reads
-to be faster and more memory efficent.
+provided by the city of New York and convert it to parquet using the
+`arrow` package. This is a one-time up-front cost that may be expensive
+in terms of time and/or computational resources. If you plan to work
+with the data a lot it will be well worth it because it allows
+subsequent reads to be faster and more memory efficient.
 
 ``` r
 library(arrow)
 
 if(!dir.exists("converted_parquet")) {
+  
   dir.create("converted_parquet")
+  
   ## this doesn't yet read the data in, it only creates a connection
   csv_ds <- open_dataset("original_csv", 
                          format = "csv",
                          partitioning = c("year", "month"))
+  
+  ## this reads each csv file in the csv_ds dataset and converts it to a .parquet file
   write_dataset(csv_ds, 
                 "converted_parquet", 
                 format = "parquet",
@@ -311,7 +313,9 @@ We can look at the converted files and compare the naming scheme and
 storage requirements to the original CSV data.
 
 ``` r
+fhvhv_csv_files <- list.files("original_csv", recursive=TRUE, full.names = TRUE)
 fhvhv_files <- list.files("converted_parquet", full.names = TRUE, recursive = TRUE)
+
 data.frame(csv_file = fhvhv_csv_files, 
            parquet_file = fhvhv_files, 
            csv_size_Mb = file.size(fhvhv_csv_files) / 1024^2, 
@@ -368,7 +372,7 @@ system.time(invisible(readr::read_csv(fhvhv_csv_files[[1]], show_col_types = FAL
 ```
 
     ##    user  system elapsed 
-    ##  54.343   2.727  19.788
+    ##  54.221   2.953  19.735
 
 ``` r
 ## arrow package parquet reader
@@ -376,7 +380,7 @@ system.time(invisible(read_parquet(fhvhv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##   3.065   1.184   2.127
+    ##   3.113   1.199   2.194
 
 ### Read and count Lyft records with arrow
 
@@ -437,7 +441,7 @@ conveniently, even on modest hardware.
 
 ### Efficiently query taxi data with duckdb
 
-If you need even more speed and convenience you can try the `duckdb`
+If you need even more speed and convenience you can use the `duckdb`
 package. It allows you to query the same parquet datasets partitioned on
 disk as we did above. You can use either SQL statements via the `DBI`
 package or tidyverse style verbs using `dbplyr`. Let’s see how it works.
@@ -496,8 +500,63 @@ dbFetch(y)
     ## 1     37250101
 
 The main advantages of `duckdb` are that it has full SQL support,
-supports streaming aggregation, and allows you to set memory limits and
-is optimized for speed.
+supports aggregating data in a streaming fashion, allows you to set
+memory limits, and is optimized for speed. The way I think about the
+relationship between `arrow` and `duckdb` is that `arrow` is primarily
+about reading and writing data as fast and efficiently as possible, with
+some built-in analysis capabilities, while `duckdb` is a database engine
+with more complete data manipulation and aggregation capabilities.
+
+It can be instructive to compare `arrow` and `duckdb` capabilities and
+performance using a slightly more complicated example. Here we compute a
+grouped average using `arrow`:
+
+``` r
+system.time({fhvhv_ds %>%
+    filter(hvfhs_license_num == "HV0005") %>%
+    select(hvfhs_license_num, month) %>%
+    group_by(hvfhs_license_num) %>%
+    collect() %>%
+    summarize(avg = mean(month, na.rm = TRUE)) %>%
+    print()})
+```
+
+    ## # A tibble: 1 × 2
+    ##   hvfhs_license_num   avg
+    ##   <chr>             <dbl>
+    ## 1 HV0005             6.10
+
+    ##    user  system elapsed 
+    ##  14.701   1.732   9.322
+
+note that we use `collect` to read the data into memory before the
+`summarize` step because `arrow` does not support aggregating in a
+streaming fashion.
+
+Here is the same query using `duckdb`:
+
+``` r
+system.time({tbl(con,"fhvhv") %>%
+    filter(hvfhs_license_num == "HV0005") %>%
+    select(hvfhs_license_num, month) %>%
+    group_by(hvfhs_license_num) %>%
+    summarize(avg = mean(month, na.rm = TRUE)) %>%
+    print()})
+```
+
+    ## # Source:   lazy query [?? x 2]
+    ## # Database: duckdb_connection
+    ##   hvfhs_license_num   avg
+    ##   <chr>             <dbl>
+    ## 1 HV0005             6.10
+
+    ##    user  system elapsed 
+    ##  13.530   0.755   6.612
+
+note that it is slightly faster, and we don’t need to read as much data
+into memory because `duckdb` supports aggregating in a streaming
+fashion. This capability is very powerful because it allows us to
+perform computations on data that is too big to fit into memory.
 
 ## Your turn!
 
@@ -518,4 +577,3 @@ Documentation for these data can be found at
 -   [Arrow Python package
     documentation](https://arrow.apache.org/docs/python/)
 -   [DuckDB documentation](https://duckdb.org/docs/)
--   
