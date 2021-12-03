@@ -1,6 +1,6 @@
 Large Data in R: Tools and Techniques
 ================
-Updated December 02, 2021
+Updated December 03, 2021
 
 -   [Environment Set Up](#environment-set-up)
 -   [Nature and Scope of the Problem: What is Large
@@ -39,7 +39,7 @@ Once you have R installed you can proceed to install the required
 packages:
 
 ``` r
-#install.packages(c("tidyverse", "data.table", "arrow", "duckdb"))
+install.packages(c("tidyverse", "data.table", "arrow", "duckdb"))
 ```
 
 Once those are installed please take a moment to download and extract
@@ -100,7 +100,7 @@ section above for convenience. Documentation can be found at
 <https://www1.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_hvfhs.pdf>
 
 In order to demonstrate large data problems and solutions I’m going to
-artificially limit my system to 8Gb of memory. This will allow us to
+artificially limit my system to 4Gb of memory. This will allow us to
 quickly see what happens when we reach the memory limit, and to look at
 solutions to that problem without waiting for our program to read in
 hundreds of Gb of data. (There is no need to follow along with this
@@ -128,19 +128,21 @@ data.frame(file = fhvhv_csv_files, size_Mb = file.size(fhvhv_csv_files) / 1024^2
     ## 11 original_csv/2020/11/fhvhv_tripdata_2020-11.csv  698.0638
     ## 12 original_csv/2020/12/fhvhv_tripdata_2020-12.csv  700.6804
 
-We can already guess based on these file sizes that with only 8 Gb of
+We can already guess based on these file sizes that with only 4 Gb of
 RAM available we’re going to have a problem.
 
 ``` r
-library(arrow)
-fhvhv_data <- do.call(rbind, lapply(fhvhv_csv_files, read_csv_arrow))
+library(tidyverse)
+fhvhv_data <- map(fhvhv_csv_files, read_csv) %>% bind_rows(show_col_types=FALSE)
 ```
 
     ## Error in eval(expr, envir, enclos): cannot allocate vector of size 7.6 Mb
 
 Perhaps you’ve seen similar messages before. Basically it means that we
 don’t have enough memory available to hold the data we want to work
-with. How can we solve this problem?
+with. I previously ran the code chunk above with more memory and found
+that it required just over 16 Gb. How can we work with data when we only
+have 1/4 of the memory requirement available?
 
 If you’re working with data large enough to hit the dreaded
 `cannot allocate vector` error when running your code, you’ve got a
@@ -353,7 +355,7 @@ data.frame(csv_file = fhvhv_csv_files,
     ##    parquet_size_Mb
     ## 1        190.26387
     ## 2        125.17837
-    ## 3        110.92145
+    ## 3        110.92144
     ## 4        111.67697
     ## 5        198.87074
     ## 6        127.53637
@@ -374,7 +376,7 @@ system.time(invisible(readr::read_csv(fhvhv_csv_files[[1]], show_col_types = FAL
 ```
 
     ##    user  system elapsed 
-    ##  53.622   2.838  19.833
+    ##  52.611   3.690  19.605
 
 ``` r
 ## arrow package parquet reader
@@ -382,7 +384,7 @@ system.time(invisible(read_parquet(fhvhv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##   3.137   1.167   2.767
+    ##   4.103   2.121  53.340
 
 ### Read and count Lyft records with arrow
 
@@ -529,7 +531,7 @@ system.time({fhvhv_ds %>%
     ## 1 HV0005             6.10
 
     ##    user  system elapsed 
-    ##  16.271   1.840  10.182
+    ##  12.578   2.076   8.605
 
 note that we use `collect` to read the data into memory before the
 `summarize` step because `arrow` does not support aggregating in a
@@ -553,7 +555,7 @@ system.time({tbl(con,"fhvhv") %>%
     ## 1 HV0005             6.10
 
     ##    user  system elapsed 
-    ##  12.858   0.695   6.229
+    ##  10.902   0.621   5.353
 
 note that it is slightly faster, and we don’t need to read as much data
 into memory because `duckdb` supports aggregating in a streaming
