@@ -234,6 +234,11 @@ Both the `arrow` and `duckdb` R packages support this type of workflow
 and can dramatically reduce the time and hardware requirements for many
 computations.
 
+Moreover, processing streaming data without needing to load it into
+memory is a general technique that can be applied to other tasks as
+well. For example the `duckdb` package allows you to compute some
+summary statistics using data streams.
+
 ### Avoid unnecessarily storing or duplicating data in memory
 
 It is also important to pay some attention to storing and processing
@@ -363,7 +368,7 @@ system.time(invisible(readr::read_csv(fhvhv_csv_files[[1]], show_col_types = FAL
 ```
 
     ##    user  system elapsed 
-    ##  53.968   2.442  19.240
+    ##  54.343   2.727  19.788
 
 ``` r
 ## arrow package parquet reader
@@ -371,7 +376,7 @@ system.time(invisible(read_parquet(fhvhv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##   3.105   1.213   2.200
+    ##   3.065   1.184   2.127
 
 ### Read and count Lyft records with arrow
 

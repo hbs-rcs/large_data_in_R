@@ -102,7 +102,9 @@ If we think carefully about it we'll see that our previous attempt to process th
 
 ### Use streaming data tools and algorithms
 
-It's all fine and good to say "only read the data you need", but how do you actually do that? Unless you have full control over the data collection and storage process chances are good that your data provider included a bunch of stuff you don't need. The key is to find a data selection and filtering tool that works with streamed data so that you can access subsets without ever loading data you don't need into memory. Both the `arrow` and `duckdb` R packages support this type of workflow and can dramatically reduce the time and hardware requirements for many computations.
+It's all fine and good to say "only read the data you need", but how do you actually do that? Unless you have full control over the data collection and storage process chances are good that your data provider included a bunch of stuff you don't need. The key is to find a data selection and filtering tool that works with streamed data so that you can access subsets without ever loading data you don't need into memory. Both the `arrow` and `duckdb` R packages support this type of workflow and can dramatically reduce the time and hardware requirements for many computations. 
+
+Moreover, processing streaming data without needing to load it into memory is a general technique that can be applied to other tasks as well. For example the `duckdb` package allows you to compute some summary statistics using data streams.
 
 ### Avoid unnecessarily storing or duplicating data in memory
 
