@@ -151,7 +151,7 @@ if(!dir.exists("converted_parquet")) {
 
 This conversion is relatively easy (even with limited memory) because the data provider is already using one of our strategies, i.e., they partitioned the data by year/month. This allows us to convert each file one at a time, without ever needing to read in all the data at once.
 
-We also took some care to partition the data into `year/month` sub-directories using what is known as "hive-style" partitioning. This is important because it makes it easy for `arrow` to automatically recognize the partitions.
+We also took care to preserve the `year/month` partition into sub-directories. We improved on the implementation by using what is known as "hive-style" partitioning, i.e., including both the variable names and values in the directory names. This is convenient because it makes it easy for `arrow` (and other tools that recognize the hive partitioning standard) to automatically recognize the partitions.
 
 We can look at the converted files and compare the naming scheme and storage requirements to the original CSV data.
 

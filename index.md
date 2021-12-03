@@ -304,10 +304,12 @@ the data provider is already using one of our strategies, i.e., they
 partitioned the data by year/month. This allows us to convert each file
 one at a time, without ever needing to read in all the data at once.
 
-We also took some care to partition the data into `year/month`
-sub-directories using what is known as “hive-style” partitioning. This
-is important because it makes it easy for `arrow` to automatically
-recognize the partitions.
+We also took care to preserve the `year/month` partition into
+sub-directories. We improved on the implementation by using what is
+known as “hive-style” partitioning, i.e., including both the variable
+names and values in the directory names. This is convenient because it
+makes it easy for `arrow` (and other tools that recognize the hive
+partitioning standard) to automatically recognize the partitions.
 
 We can look at the converted files and compare the naming scheme and
 storage requirements to the original CSV data.
@@ -372,7 +374,7 @@ system.time(invisible(readr::read_csv(fhvhv_csv_files[[1]], show_col_types = FAL
 ```
 
     ##    user  system elapsed 
-    ##  54.221   2.953  19.735
+    ##  53.622   2.838  19.833
 
 ``` r
 ## arrow package parquet reader
@@ -380,7 +382,7 @@ system.time(invisible(read_parquet(fhvhv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##   3.113   1.199   2.194
+    ##   3.137   1.167   2.767
 
 ### Read and count Lyft records with arrow
 
@@ -527,7 +529,7 @@ system.time({fhvhv_ds %>%
     ## 1 HV0005             6.10
 
     ##    user  system elapsed 
-    ##  14.701   1.732   9.322
+    ##  16.271   1.840  10.182
 
 note that we use `collect` to read the data into memory before the
 `summarize` step because `arrow` does not support aggregating in a
@@ -551,7 +553,7 @@ system.time({tbl(con,"fhvhv") %>%
     ## 1 HV0005             6.10
 
     ##    user  system elapsed 
-    ##  13.530   0.755   6.612
+    ##  12.858   0.695   6.229
 
 note that it is slightly faster, and we don’t need to read as much data
 into memory because `duckdb` supports aggregating in a streaming
