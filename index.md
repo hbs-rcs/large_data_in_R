@@ -1,6 +1,6 @@
 Large Data in R: Tools and Techniques
 ================
-Updated December 03, 2021
+Updated December 06, 2021
 
 -   [Environment Set Up](#environment-set-up)
 -   [Nature and Scope of the Problem: What is Large
@@ -376,7 +376,7 @@ system.time(invisible(readr::read_csv(fhvhv_csv_files[[1]], show_col_types = FAL
 ```
 
     ##    user  system elapsed 
-    ##  52.611   3.690  19.605
+    ##  79.982   6.362  31.824
 
 ``` r
 ## arrow package parquet reader
@@ -384,7 +384,7 @@ system.time(invisible(read_parquet(fhvhv_files[[1]])))
 ```
 
     ##    user  system elapsed 
-    ##   4.103   2.121  53.340
+    ##   5.761   2.226  22.533
 
 ### Read and count Lyft records with arrow
 
@@ -454,35 +454,17 @@ First we create a `duckdb` table from our `arrow` dataset.
 
 ``` r
 library(duckdb)
-library(DBI)
 library(dplyr)
 
 con <- DBI::dbConnect(duckdb::duckdb())
-to_duckdb(fhvhv_ds, con, "fhvhv")
+fhvhv_tbl <- to_duckdb(fhvhv_ds, con, "fhvhv")
 ```
-
-    ## # Source:   table<fhvhv> [?? x 9]
-    ## # Database: duckdb_connection
-    ##    hvfhs_license_num dispatching_base_num pickup_datetime     dropoff_datetime  
-    ##    <chr>             <chr>                <chr>               <chr>             
-    ##  1 HV0003            B02864               2020-01-01 00:45:3… 2020-01-01 01:02:…
-    ##  2 HV0003            B02682               2020-01-01 00:47:5… 2020-01-01 00:53:…
-    ##  3 HV0003            B02764               2020-01-01 00:04:3… 2020-01-01 00:21:…
-    ##  4 HV0003            B02764               2020-01-01 00:26:3… 2020-01-01 00:33:…
-    ##  5 HV0003            B02764               2020-01-01 00:37:4… 2020-01-01 00:46:…
-    ##  6 HV0003            B02764               2020-01-01 00:49:2… 2020-01-01 01:07:…
-    ##  7 HV0003            B02870               2020-01-01 00:21:1… 2020-01-01 00:36:…
-    ##  8 HV0003            B02870               2020-01-01 00:38:2… 2020-01-01 00:42:…
-    ##  9 HV0003            B02870               2020-01-01 00:46:2… 2020-01-01 01:09:…
-    ## 10 HV0003            B02836               2020-01-01 00:15:3… 2020-01-01 00:23:…
-    ## # … with more rows, and 5 more variables: PULocationID <dbl>,
-    ## #   DOLocationID <dbl>, SR_Flag <dbl>, year <int>, month <int>
 
 The `duckdb` table can be queried using tidyverse style verbs or SQL.
 
 ``` r
 ## number of Lyft trips, tidyverse style
-tbl(con,"fhvhv") %>%
+fhvhv_tbl %>%
   filter(hvfhs_license_num == "HV0005") %>%
   select(hvfhs_license_num) %>%
   count()
@@ -531,7 +513,7 @@ system.time({fhvhv_ds %>%
     ## 1 HV0005             6.10
 
     ##    user  system elapsed 
-    ##  12.578   2.076   8.605
+    ##  19.456   4.064  14.254
 
 note that we use `collect` to read the data into memory before the
 `summarize` step because `arrow` does not support aggregating in a
@@ -540,7 +522,7 @@ streaming fashion.
 Here is the same query using `duckdb`:
 
 ``` r
-system.time({tbl(con,"fhvhv") %>%
+system.time({fhvhv_tbl %>%
     filter(hvfhs_license_num == "HV0005") %>%
     select(hvfhs_license_num, month) %>%
     group_by(hvfhs_license_num) %>%
@@ -555,7 +537,7 @@ system.time({tbl(con,"fhvhv") %>%
     ## 1 HV0005             6.10
 
     ##    user  system elapsed 
-    ##  10.902   0.621   5.353
+    ##  18.766   1.251   8.984
 
 note that it is slightly faster, and we don’t need to read as much data
 into memory because `duckdb` supports aggregating in a streaming

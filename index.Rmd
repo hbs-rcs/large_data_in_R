@@ -217,17 +217,16 @@ If you need even more speed and convenience you can use the `duckdb` package. It
 First we create a `duckdb` table from our `arrow` dataset.
 ```{r message=FALSE}
 library(duckdb)
-library(DBI)
 library(dplyr)
 
 con <- DBI::dbConnect(duckdb::duckdb())
-to_duckdb(fhvhv_ds, con, "fhvhv")
+fhvhv_tbl <- to_duckdb(fhvhv_ds, con, "fhvhv")
 ```
 
 The `duckdb` table can be queried using tidyverse style verbs or SQL.
 ```{r}
 ## number of Lyft trips, tidyverse style
-tbl(con,"fhvhv") %>%
+fhvhv_tbl %>%
   filter(hvfhs_license_num == "HV0005") %>%
   select(hvfhs_license_num) %>%
   count()
@@ -255,7 +254,7 @@ note that we use `collect` to read the data into memory before the `summarize` s
 Here is the same query using `duckdb`:
 
 ```{r}
-system.time({tbl(con,"fhvhv") %>%
+system.time({fhvhv_tbl %>%
     filter(hvfhs_license_num == "HV0005") %>%
     select(hvfhs_license_num, month) %>%
     group_by(hvfhs_license_num) %>%

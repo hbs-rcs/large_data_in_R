@@ -43,7 +43,8 @@ In order to demonstrate large data problems and solutions I'm going to artificia
 
 Start by looking at the file names and sizes:
 ```{r}
-
+fhvhv_csv_files <- list.files("original_csv/", recursive = TRUE, full.names = TRUE)
+data.frame(file = fhvhv_csv_files, size_Mb = file.size(fhvhv_csv_files)/ 1024^2)
 ```
 
 Try to read them in
@@ -94,13 +95,27 @@ Now that we have some theoretical foundations to build on we can start putting t
 The first step is to take the slow and inefficient text-based data provided by the city of New York and convert it to parquet using the `arrow` package.
 
 ```{r message=FALSE}
+library(arrow)
 
+csv_ds <- open_dataset("original_csv",
+                       format = "csv",
+                       partitioning = c("year", "month"))
+
+write_dataset(csv_ds,
+              "converted_parquet",
+              format = "parquet",
+              partitioning = c("year", "month"))
 ```
 
 Look at the converted files and compare the naming scheme and storage requirements to the original CSV data.
 
 ```{r}
+fhvhv_csv_files <- list.files("original_csv", recursive = TRUE, full.names = TRUE)
+fhvhv_files <- list.files("converted_parquet", recursive = TRUE, full.names = TRUE)
 
+data.frame(csv_file = fhvhv_csv_files, parquet_file  = fhvhv_files,
+           csv_size_Mb = file.size(fhvhv_csv_files)/1024^2, 
+           fhvhv_sizedMb = file.size(fhvhv_files)/1024^2)
 ```
 
 
@@ -111,13 +126,28 @@ The `arrow` package makes it easy to read and process only the data we need for 
 Start by creating a dataset representation from the partitioned data directory:
 
 ```{r}
-
+fhvhv_ds <- open_dataset("converted_parquet",
+                         schema = schema(hvfhs_license_num=string(),
+                                         dispatching_base_num=string(),
+                                         pickup_datetime=string(),
+                                         dropoff_datetime=string(),
+                                         PULocationID=int64(),
+                                         DOLocationID=int64(),
+                                         SR_Flag=int64(),
+                                         year=int32(),
+                                         month=int32()))
 ```
 
 Compute the number of NYC Lyft trips in 2020, even on a machine with limited memory:
 
 ```{r}
+library(dplyr)
 
+fhvhv_ds %>%
+  filter(hvfhs_license_num == "HV0005") %>%
+  select(hvfhs_license_num) %>%
+  collect() %>%
+  summarize(total_Lyft_trips = n())
 ```
 
 ### Efficiently query taxi data with duckdb
